@@ -18,6 +18,18 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   app=await electron.launch({args:[entry],env:{...process.env,AGENTIBOU_HOME:root,CODEX_HOME:path.join(root,'codex'),AGENTIBOU_CLAUDE_DESKTOP_HOME:path.join(root,'claude')}});
   assert.deepEqual(await app.evaluate(({app},flags)=>flags.filter(flag=>app.commandLine.hasSwitch(flag)),switches),[]);
   const pet=await wait(()=>app.windows().find(w=>w.url().endsWith('pet.html?provider=codex')),'companion');
+  const dashboard=await wait(()=>app.windows().find(w=>w.url().endsWith('index.html')),'dashboard');
+  const sample=async(ms=3200)=>{
+   await pet.evaluate(()=>{
+    const sprite=document.querySelector('.sprite');let last=sprite.style.backgroundPosition;
+    window.animationSamples=[];
+    window.animationObserver=new MutationObserver(()=>{const position=sprite.style.backgroundPosition;if(position!==last){window.animationSamples.push(position);last=position;}});
+    window.animationObserver.observe(sprite,{attributes:true,attributeFilter:['style']});
+   });
+   // Wait outside the renderer: repeated evaluate calls could wake a stalled page.
+   await delay(ms);
+   return pet.evaluate(()=>{window.animationObserver.disconnect();return window.animationSamples;});
+  };
   await pet.emulateMedia({reducedMotion:'no-preference'});
   await pet.waitForFunction(()=>document.querySelector('.sprite')?.getAttribute('aria-label')?.includes('au travail'));
   await wait(()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().some(w=>w.webContents.getURL().includes('pet.html?provider=codex')&&w.isVisible())),'visible companion');
@@ -33,21 +45,40 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
     for(const w of windows)if(w!==panel)w.blur();
    },mode);
    await delay(500);
-   await pet.evaluate(()=>{
-    const sprite=document.querySelector('.sprite');let last=sprite.style.backgroundPosition;
-    window.animationSamples=[];
-    window.animationObserver=new MutationObserver(()=>{const position=sprite.style.backgroundPosition;if(position!==last){window.animationSamples.push(position);last=position;}});
-    window.animationObserver.observe(sprite,{attributes:true,attributeFilter:['style']});
-   });
-   // Wait outside the renderer: repeated evaluate calls could wake a stalled page.
-   await delay(3200);
-   const positions=await pet.evaluate(()=>{window.animationObserver.disconnect();return window.animationSamples;});
+   const positions=await sample();
    assert.ok(positions.length>=10,`${mode}: animation stalled (${positions.length} frame changes in 3.2s)`);
    assert.equal(new Set(positions).size,6,`${mode}: all working frames should appear`);
    const native=await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('pet.html?provider=codex'));return {visible:w.isVisible(),focused:w.isFocused()};});
    assert.deepEqual(native,{visible:true,focused:false});
    console.log(`${mode}: ${positions.length} frame changes; companion visible and unfocused`);
   }
+  // Windows accessibility (also used by remote sessions) can request reduced
+  // motion. Emulate that independently of focus: the old checkbox hid this case.
+  await pet.emulateMedia({reducedMotion:'reduce'});
+  await dashboard.emulateMedia({reducedMotion:'reduce'});
+  await delay(300);
+  assert.equal((await sample(800)).length,0,'default must respect system reduction');
+  await dashboard.waitForFunction(()=>document.querySelector('#motion-status').textContent.includes('Ton système réduit'));
+  await dashboard.locator('#motion-mode').selectOption('full');
+  await wait(async()=>(await pet.evaluate(()=>window.agentibou.getState())).settings.reducedMotion===false,'explicit full motion');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'preferences.json'))).reducedMotion,false);
+  await app.evaluate(({BrowserWindow})=>{for(const w of BrowserWindow.getAllWindows()){if(w.webContents.getURL().endsWith('index.html'))w.hide();else w.blur();}});
+  for(const [state,label] of [['idle','repos'],['thinking','réflexion'],['working','travail'],['done','célèbre'],['waiting','attente'],['error','erreur']]){
+   await dashboard.evaluate(state=>window.agentibou.demo(state),state);
+   await pet.waitForFunction(label=>document.querySelector('.sprite').getAttribute('aria-label').includes(label),label);
+   const positions=await sample();
+   assert.ok(new Set(positions).size>1,`${state}: explicit full motion must override OS reduction without focus`);
+   console.log(`OS reduce + animations enabled + unfocused: ${state}, ${positions.length} frame changes`);
+  }
+  await dashboard.evaluate(()=>window.agentibou.demo(null));
+  for(const preference of [true,null]){
+   await dashboard.locator('#motion-mode').selectOption(preference===true?'reduced':'system');
+   await delay(300);
+   assert.equal((await sample(800)).length,0,'reduced and system settings must still respect accessibility');
+   assert.equal(JSON.parse(fs.readFileSync(path.join(root,'preferences.json'))).reducedMotion,preference);
+  }
+  await pet.emulateMedia({reducedMotion:'no-preference'});
+  assert.ok((await sample(1000)).length>1,'system mode must follow OS changes live');
   console.log(`Background animation OK on ${process.platform}. Other operating systems still require a native run.`);
  }finally{if(app)await app.close();fs.rmSync(root,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});

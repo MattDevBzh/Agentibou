@@ -101,7 +101,7 @@ ipcMain.handle('pet-appearance',(event,provider,value)=>{
  saveSettings();send();return {saved:true};
 });
 ipcMain.handle('demo',(_,state)=>{if(!['idle','thinking','working','done','waiting','error',null].includes(state))return;for(const w of [panel,...[...pets.values()].map(p=>p.window)])if(w&&!w.isDestroyed())w.webContents.send('demo',state);});
-ipcMain.handle('preferences',(_,values)=>{for(const k of ['reducedMotion','silent','keepAssignedVisible'])if(typeof values[k]==='boolean')settings[k]=values[k];saveSettings();send();});
+ipcMain.handle('preferences',(_,values)=>{if(values.reducedMotion===null)settings.reducedMotion=null;for(const k of ['reducedMotion','silent','keepAssignedVisible'])if(typeof values[k]==='boolean')settings[k]=values[k];saveSettings();send();});
 ipcMain.handle('clear-session',(_,key)=>{if(typeof key==='string'){const e=store.sessions.get(key);if(e){e.state='idle';e.at=Date.now();}}send();});
 ipcMain.handle('install',async(_,kind)=>{
  try{if(!['claude','vscode','visualstudio'].includes(kind))throw new Error('Intégration inconnue');let project;

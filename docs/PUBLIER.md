@@ -35,3 +35,9 @@ Mac active la signature, la notarisation et les mises à jour natives uniquement
 - Les anciennes données `.avatai` sont conservées. Les anciens ZIP nécessitent une première installation de la distribution équipée de l’updater.
 
 Une release publiée et des tests automatisés réussis ne prouvent pas encore une migration réelle entre deux versions installées. Valider cette migration sur un poste Windows, puis sur un Mac signé, lors des versions suivantes. Contrôler notamment la conservation des préférences, les raccourcis, les hooks et la reprise après redémarrage.
+
+## Diagnostiquer un compagnon immobile
+
+Dans le tableau de bord, le réglage **Animations** distingue **Selon le système**, **Activées** et **Réduites**. Le premier suit les préférences d’accessibilité du système ; **Activées** permet explicitement de les remplacer pour les sprites Agentibou. Un changement d’état peut fonctionner avec une image fixe lorsque la réduction des mouvements est active. Les compagnons conservent `backgroundThrottling: false` indépendamment de ce réglage.
+
+Le test `test:background` retire les commutateurs ajoutés par Playwright qui désactivent normalement les limitations d’arrière-plan. Il vérifie les images des compagnons sans focus, avec le tableau de bord actif, masqué puis minimisé. Il simule ensuite la préférence système de réduction des mouvements : respect par défaut, animation de chaque état après activation explicite, et retour au mode réduit ou système. La simulation du réglage et la variation des positions de sprites ne prouvent pas le rendu visuel sur chaque PC utilisateur.

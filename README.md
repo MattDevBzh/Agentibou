@@ -20,7 +20,7 @@ Les premières distributions sont en bêta, sans signature éditeur ni notarisat
 - Personnage, position, taille et visibilité indépendants pour chaque outil.
 - Plusieurs sessions suivies, avec des bulles distinctes.
 - Import de planches animées PNG/WebP. [Créer un compagnon](docs/CREER-UN-COMPAGNON.md).
-- Animations réduites et préférences du système respectées.
+- Animations au choix : selon le système (par défaut), activées même si Windows réduit les effets visuels, ou réduites.
 
 « Terminé » signifie que l’agent a fini sa réponse. Ce n’est pas une validation du code, des tests ou d’un déploiement.
 

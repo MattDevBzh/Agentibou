@@ -11,3 +11,5 @@ h1 b{font-weight:400}.library-settings{border:1px solid #dce3d3;border-radius:13
 .pet-actions{display:flex;flex-direction:column;align-items:stretch;gap:7px}.pet-actions #restore-pets{font-size:11px;background:#e8ece2;border-color:#cdd8bd}
 
 .update-panel{display:flex;align-items:center;gap:12px;margin-top:25px;padding:16px;border:1px solid #dce3d3;border-radius:10px;background:#fdfdf8}.update-panel>div{flex:1}.update-panel strong{font-size:12px}.update-panel p{font-size:10px;color:#788774;margin:7px 0 0}.update-panel .icon-button{font-size:10px}
+
+footer{flex-wrap:wrap}footer select{font:inherit;font-size:11px;color:#304c3a;background:#fffefa;border:1px solid #dce1d5;border-radius:7px;padding:7px;-webkit-app-region:no-drag}footer select:focus-visible{outline:3px solid #5b927d;outline-offset:3px}.motion-status{font-size:11px;line-height:1.6;color:#62705d;margin:10px 0 0}
