@@ -1,0 +1,18 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');const {pathToFileURL}=require('node:url');
+const PROVIDERS=['codex','claude','copilot','visualstudio'];
+const TOKTOKETTE_ID='600ddd0f-4e99-482f-bc26-5f23d165e82d';
+const validId=id=>typeof id==='string'&&/^[0-9a-f-]{36}$/.test(id);
+function cleanName(name){if(typeof name!=='string')throw new Error('Donne un nom au compagnon.');const n=name.replace(/[\x00-\x1f]/g,'').trim();if(!n||n.length>40)throw new Error('Le nom doit contenir de 1 à 40 caractères.');return n;}
+function imageType(bytes){if(bytes.length>20*1024*1024)throw new Error('L’image ne doit pas dépasser 20 Mo.');if(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))return 'png';if(bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP')return 'webp';throw new Error('Choisis une image PNG ou WebP.');}
+function cleanSelection(value,catalog){const ids=new Set(catalog.map(p=>p.id));const source=value&&typeof value==='object'?value:{};const defaultId=ids.has(source.defaultId)?source.defaultId:'vic';const assignments={};for(const p of PROVIDERS)if(ids.has(source.assignments?.[p]))assignments[p]=source.assignments[p];return {mode:source.mode==='per-tool'?'per-tool':'shared',defaultId,assignments};}
+function selectedCompanion(selection,catalog,provider){const s=cleanSelection(selection,catalog);const id=s.mode==='per-tool'?(s.assignments[provider]||s.defaultId):s.defaultId;return catalog.find(p=>p.id===id)||catalog[0];}
+function visibleProviders(conversations,selection,keepAssignedVisible=true){const wanted=PROVIDERS.filter(provider=>conversations.some(e=>e.provider===provider)||(keepAssignedVisible&&selection.mode==='per-tool'&&!!selection.assignments[provider]));return wanted.length?wanted:['idle'];}
+class CompanionLibrary{
+ constructor(root,builtin){this.root=path.join(root,'companions');this.file=path.join(this.root,'library.json');this.builtin=builtin;this.toktokette=path.join(path.dirname(builtin),'toktokette.png');this.entries=[];try{const entries=JSON.parse(fs.readFileSync(this.file,'utf8'));if(Array.isArray(entries))this.entries=entries.slice(0,100).filter(e=>e.id!==TOKTOKETTE_ID&&validId(e.id)&&['png','webp'].includes(e.type)&&typeof e.name==='string'&&fs.existsSync(this.asset(e))).map(e=>({id:e.id,type:e.type,name:cleanName(e.name)}));}catch{}}
+ asset(e){return path.join(this.root,e.id,'atlas.'+e.type);}
+ list(){return [{id:'vic',name:'Vic',builtin:true,imageUrl:pathToFileURL(this.builtin).href},{id:TOKTOKETTE_ID,name:'Toktokette',builtin:true,imageUrl:pathToFileURL(this.toktokette).href},...this.entries.map(e=>({id:e.id,name:e.name,builtin:false,imageUrl:pathToFileURL(this.asset(e)).href}))];}
+ save(){fs.mkdirSync(this.root,{recursive:true,mode:0o700});const tmp=this.file+'.tmp';fs.writeFileSync(tmp,JSON.stringify(this.entries,null,2)+'\n',{mode:0o600});fs.renameSync(tmp,this.file);}
+ add(name,bytes,type){name=cleanName(name);if(type!==imageType(bytes))throw new Error('Format incohérent.');if(this.entries.length>=100)throw new Error('La bibliothèque contient déjà 100 compagnons.');const entry={id:crypto.randomUUID(),name,type};const dir=path.dirname(this.asset(entry));fs.mkdirSync(dir,{recursive:true,mode:0o700});try{fs.writeFileSync(this.asset(entry),bytes,{mode:0o600});this.entries.push(entry);this.save();}catch(e){this.entries=this.entries.filter(p=>p.id!==entry.id);fs.rmSync(dir,{recursive:true,force:true});throw e;}return this.list().find(p=>p.id===entry.id);}
+}
+module.exports={visibleProviders,CompanionLibrary,PROVIDERS,cleanSelection,selectedCompanion,cleanName,imageType};

@@ -1,0 +1,55 @@
+'use strict';
+const $=s=>document.querySelector(s), sprite=new VicSprite($('.sprite'));
+const names={codex:'Codex',claude:'Claude Code',copilot:'Copilot · VS Code',visualstudio:'Copilot · Visual Studio'};
+const labels={idle:'Au repos',thinking:'En réflexion',working:'Au travail',done:'Réponse terminée',waiting:'En attente',error:'Une erreur est survenue'};
+const copy={idle:['La pause est\nun art aussi.','Vic garde le ballon au chaud, en attendant ta prochaine idée.'],thinking:['Une idée\nse prépare.','Vic prend le temps de réfléchir, sans quitter le ballon des yeux.'],working:['Ça cogite.\nÇa pianote.','Ton agent est au travail. Vic aussi : chacun son clavier, même équipe.'],done:['Et une tâche\nde moins !','L’agent a fini sa réponse. Petit shoot de victoire, puis à toi de jouer.'],waiting:['À toi\nde jouer.','Une réponse ou une vérification peut être nécessaire. Jette un œil à la session.'],error:['Petit temps\nmort.','L’agent a signalé une erreur. La session contient les détails pour repartir.']};
+let current={state:'idle',sessions:[],settings:{}},demo=null,demoTimer,toastTimer;
+function render(s){current=s;const state=demo||s.state;sprite.use(s.companion);renderCompanions(s);renderAppearance(s);$('#companion-name').textContent=s.companion?.name||'Vic';$('.stage-caption').textContent=(s.companion?.name||'Vic').toUpperCase()+' / TON COÉQUIPIER DE POCHE';sprite.set(state,s.settings.reducedMotion);$('#status-short').textContent=labels[state];$('#status-pill').dataset.state=state;$('#state-title').textContent=copy[state][0];$('#state-title').style.whiteSpace='pre-line';$('#state-description').textContent=s.companion?.id==='vic'?copy[state][1]:({idle:'Ton compagnon profite du calme, en attendant ta prochaine idée.',thinking:'Ton compagnon réfléchit avec ton agent.',working:'Ton agent avance, ton compagnon s’active.',done:'L’agent a fini sa réponse. Ton compagnon célèbre, puis à toi de jouer.'}[state]||copy[state][1]);$('#live-label').textContent=demo?'APERÇU · 12 S':'EN DIRECT';$('#focus-provider').textContent=demo?'Aperçu de l’animation':s.focus?names[s.focus.provider]:'Prêt pour la prochaine tâche';$('#focus-project').textContent=demo?'Retour automatique au suivi réel.':s.focus?.project||'Tes sessions apparaîtront ici.';$('#end-demo').classList.toggle('hidden',!demo);document.querySelectorAll('[data-demo]').forEach(b=>b.classList.toggle('active',b.dataset.demo===demo));$('#codex-status').textContent=s.diagnostics?.codex||'Recherche…';$('#reduced-motion').checked=!!s.settings.reducedMotion;$('#keep-assigned-visible').checked=s.settings.keepAssignedVisible!==false;$('#session-count').textContent=s.sessions.length;$('#active-count').textContent=s.active?`${s.active} session${s.active>1?'s':''} au travail`:'Tout est calme.';
+ const container=$('#sessions');container.replaceChildren();
+ if(!s.sessions.length){const e=document.createElement('p');e.className='empty';e.textContent='Lance une tâche : ton compagnon prendra le relais.';container.append(e);}
+ for(const session of s.sessions){const row=document.createElement('div');row.className='session';row.dataset.state=session.state;const dot=document.createElement('span');dot.className='session-dot';const name=document.createElement('strong');name.textContent=names[session.provider];const project=document.createElement('span');project.className='project';project.textContent=session.project;project.title=session.project;const stateLabel=document.createElement('span');stateLabel.className='state';stateLabel.textContent=session.stale?'Signal ancien · à vérifier':labels[session.state];const reset=document.createElement('button');reset.textContent='×';reset.title='Remettre cette session au repos';reset.setAttribute('aria-label',`Remettre ${session.project} au repos`);reset.onclick=()=>window.agentibou.clearSession(session.provider+':'+session.session);row.append(dot,name,project,stateLabel);if(s.completions?.some(e=>e.session===session.session&&e.provider===session.provider)){const open=document.createElement('button');open.textContent='↗';open.title='Ouvrir la conversation terminée';open.setAttribute('aria-label',open.title);const target=s.completions.find(e=>e.session===session.session&&e.provider===session.provider);open.onclick=async()=>{const r=await window.agentibou.openSession(target.provider+':'+target.session,target.at);if(r.error)toast(r.error,true);};row.append(open);}row.append(reset);container.append(row);}
+}
+function toast(text,error=false){$('#toast').textContent=text;$('#toast').classList.remove('hidden');$('#toast').classList.toggle('error',error);clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.add('hidden'),15000);}
+window.agentibou.onState(render);window.agentibou.getState().then(render);window.agentibou.onDemo(state=>{demo=state;clearTimeout(demoTimer);if(state)demoTimer=setTimeout(()=>window.agentibou.demo(null),12000);render(current);});
+document.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>window.agentibou.demo(b.dataset.demo));$('#end-demo').onclick=()=>window.agentibou.demo(null);$('#toggle-pet').onclick=async()=>{const shown=await window.agentibou.togglePet();toast(shown?'L’affichage global est activé. Pour annuler aussi les masquages individuels, clique sur Réafficher tous les compagnons.':'Tes compagnons sont masqués. Clique à nouveau pour les retrouver.');};$('#reduced-motion').onchange=e=>window.agentibou.preferences({reducedMotion:e.target.checked});$('#open-folder').onclick=()=>window.agentibou.openFolder();
+document.querySelectorAll('[data-install]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await window.agentibou.install(b.dataset.install);if(!r.cancelled)toast(r.error||r.message,!!r.error);}catch{toast('Connexion impossible. Réessaie depuis le tableau de bord.',true);}finally{b.disabled=false;}});
+
+let librarySignature='';
+function renderCompanions(s){
+ if(!s.companions||!s.companionSelection)return;
+ const signature=JSON.stringify([s.companions,s.companionSelection]);if(signature===librarySignature)return;librarySignature=signature;
+ const selection=s.companionSelection;
+ const populate=(select,value,inherit=false)=>{select.replaceChildren();if(inherit)select.add(new Option('Par défaut',''));for(const p of s.companions)select.add(new Option(p.name,p.id));select.value=value;};
+ populate($('#default-companion'),selection.defaultId);$('#shared-companion').checked=selection.mode==='shared';$('#provider-companions').classList.toggle('hidden',selection.mode==='shared');
+ document.querySelectorAll('[data-provider]').forEach(el=>populate(el,selection.assignments[el.dataset.provider]||'',true));
+ const gallery=$('#companion-gallery');gallery.replaceChildren();
+ for(const p of s.companions){const card=document.createElement('div');card.className='companion-card';const pic=document.createElement('div');pic.className='companion-thumbnail';pic.style.backgroundImage=`url(${JSON.stringify(p.imageUrl)})`;pic.setAttribute('role','img');pic.setAttribute('aria-label',p.name);const info=document.createElement('div'),name=document.createElement('strong'),detail=document.createElement('small');name.textContent=p.name;detail.textContent=p.builtin?'Compagnon inclus':'Dans ta bibliothèque';info.append(name,detail);card.append(pic,info);gallery.append(card);}
+}
+async function saveCompanions(){
+ const assignments={};document.querySelectorAll('[data-provider]').forEach(el=>{if(el.value)assignments[el.dataset.provider]=el.value;});
+ const result=await window.agentibou.selectCompanions({mode:$('#shared-companion').checked?'shared':'per-tool',defaultId:$('#default-companion').value,assignments});if(result.error){toast(result.error,true);librarySignature='';render(current);}
+}
+$('#default-companion').onchange=saveCompanions;$('#shared-companion').onchange=saveCompanions;document.querySelectorAll('[data-provider]').forEach(el=>el.onchange=saveCompanions);
+$('#import-companion').onsubmit=async e=>{e.preventDefault();const button=e.currentTarget.querySelector('button');button.disabled=true;try{const result=await window.agentibou.importCompanion($('#new-companion-name').value);if(result.error)toast(result.error,true);else if(result.companion){$('#new-companion-name').value='';toast(`${result.companion.name} a rejoint la bibliothèque. Choisis maintenant ses outils !`);}}catch{toast('Import impossible. Réessaie avec une planche PNG ou WebP.',true);}finally{button.disabled=false;}};
+
+$('#restore-pets').onclick=async()=>{const result=await window.agentibou.restorePets();if(result.error)toast(result.error,true);else toast('Les compagnons actifs ou attribués sont réaffichés. Les autres reviendront à leur prochaine activité.');};
+$('#keep-assigned-visible').onchange=e=>window.agentibou.preferences({keepAssignedVisible:e.target.checked});
+
+const appearanceRows=new Map();
+function renderAppearance(s){
+ const hiddenCount=(s.petControls||[]).filter(p=>p.present&&p.hidden).length;
+ $('#pets-global-status').textContent=!s.petsVisible?'Tous les compagnons sont temporairement masqués.':hiddenCount?hiddenCount+' compagnon'+(hiddenCount>1?'s masqués':' masqué')+' · Réafficher avec le bouton en haut.':'';
+ $('#toggle-pet').setAttribute('aria-pressed',String(s.petsVisible));
+ for(const item of s.petControls||[]){let row=appearanceRows.get(item.provider);
+  if(!row){row=document.createElement('div');row.className='appearance-row';row.dataset.petProvider=item.provider;
+   const info=document.createElement('div'),name=document.createElement('strong'),status=document.createElement('small'),range=document.createElement('input'),value=document.createElement('output'),toggle=document.createElement('button');
+   const label=names[item.provider]||'Compagnon au repos';name.textContent=label;info.append(name,status);range.type='range';range.min='60';range.max='150';range.step='10';range.setAttribute('aria-label','Taille · '+label);range.id='size-'+item.provider;value.htmlFor=range.id;toggle.className='icon-button';
+   range.oninput=()=>{value.textContent=range.value+' %';};range.onchange=async()=>{const r=await window.agentibou.petAppearance(item.provider,{scale:Number(range.value)/100});if(r.error)toast(r.error,true);};
+   toggle.onclick=async()=>{const r=await window.agentibou.petAppearance(item.provider,{hidden:!(row.preference.hidden||!current.petsVisible)});if(r.error)toast(r.error,true);};
+   row.append(info,range,value,toggle);appearanceRows.set(item.provider,row);$('#pet-appearance').append(row);
+  }
+  row.preference=item;const [info,range,value,toggle]=row.children;info.lastChild.textContent=item.hidden?'Masqué':!item.present?'En attente d’activité':!s.petsVisible?'Masqué avec toute l’équipe':'Sur le bureau';
+  if(document.activeElement!==range){range.value=Math.round(item.scale*100);value.textContent=Math.round(item.scale*100)+' %';}
+  toggle.textContent=item.hidden||!s.petsVisible?'Réafficher':'Masquer';toggle.setAttribute('aria-label',toggle.textContent+' · '+(names[item.provider]||'Compagnon au repos'));toggle.setAttribute('aria-pressed',String(!item.hidden&&s.petsVisible));
+ }
+}

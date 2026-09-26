@@ -1,0 +1,96 @@
+{
+  "name": "agentibou",
+  "version": "0.7.0",
+  "private": true,
+  "description": "Un compagnon de bureau pour vos agents de développement",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "pack": "electron-builder --dir",
+    "dist:win": "electron-builder --win nsis --x64 --publish never",
+    "dist:mac": "electron-builder --mac dmg zip --arm64 --publish never",
+    "test:ui": "node scripts/test-ui.cjs",
+    "test:recovery": "node scripts/test-recovery.cjs",
+    "test:background": "node scripts/test-background.cjs",
+    "site:build": "node scripts/build-site.cjs",
+    "site:serve": "node scripts/serve-site.cjs",
+    "site:test": "node scripts/test-site.cjs"
+  },
+  "devDependencies": {
+    "electron": "44.3.0",
+    "electron-builder": "^26.15.3",
+    "playwright": "^1.63.0",
+    "yaml": "2.9.1"
+  },
+  "build": {
+    "appId": "fr.agentibou.companion",
+    "productName": "Agentibou",
+    "files": [
+      "src/**/*",
+      "scripts/bridge.cjs",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "artifactName": "Agentibou-${version}-${os}-${arch}.${ext}",
+    "extraFiles": [
+      {
+        "from": "README.md",
+        "to": "LIRE-MOI.md"
+      },
+      {
+        "from": "docs/CREER-UN-COMPAGNON.md",
+        "to": "docs/CREER-UN-COMPAGNON.md"
+      },
+      {
+        "from": "docs/INSTALLER-WINDOWS.md",
+        "to": "INSTALLER-WINDOWS.md"
+      },
+      {
+        "from": "docs/INSTALLER-WINDOWS.txt",
+        "to": "INSTALLER-WINDOWS.txt"
+      }
+    ],
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Agentibou"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "MattDevBzh",
+      "repo": "Agentibou",
+      "releaseType": "release"
+    }
+  },
+  "author": "Matt",
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MattDevBzh/Agentibou.git"
+  },
+  "homepage": "https://mattdevbzh.github.io/Agentibou/",
+  "bugs": {
+    "url": "https://github.com/MattDevBzh/Agentibou/issues"
+  },
+  "agentibouUpdates": {
+    "macSigned": false
+  }
+}
