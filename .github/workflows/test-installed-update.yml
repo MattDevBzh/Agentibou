@@ -1,0 +1,55 @@
+name: Test published Windows update
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: Installed version to test
+        default: '0.7.0'
+        required: true
+      target:
+        description: Expected latest published version
+        default: '0.7.1'
+        required: true
+permissions:
+  contents: read
+jobs:
+  installed-update:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install the real previous release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE_FROM: ${{ inputs.from }}
+        run: |
+          if ($env:UPDATE_FROM -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
+          $installerName = "Agentibou-$env:UPDATE_FROM-win-x64.exe"
+          gh release download "v$env:UPDATE_FROM" --pattern $installerName --pattern SHA256SUMS.txt --dir release-artifacts
+          if ($LASTEXITCODE -ne 0) { throw 'Release download failed' }
+          $installer = Join-Path $PWD "release-artifacts/$installerName"
+          $expectedLine = Get-Content release-artifacts/SHA256SUMS.txt | Where-Object { $_.EndsWith($installerName) }
+          if (!$expectedLine -or (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower() -ne ($expectedLine -split '\s+')[0]) { throw 'Installer checksum mismatch' }
+          $installDir = Join-Path $env:RUNNER_TEMP 'AgentibouInstalled'
+          $process = Start-Process -FilePath $installer -ArgumentList '/S', "/D=$installDir" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)" }
+          Get-Process Agentibou -ErrorAction SilentlyContinue | Stop-Process -Force
+          "AGENTIBOU_TEST_EXE=$installDir/Agentibou.exe" >> $env:GITHUB_ENV
+      - name: Wait for automatic detection and capture the dashboard alert
+        run: node scripts/test-installed-update.cjs
+        env:
+          UPDATE_FROM: ${{ inputs.from }}
+          UPDATE_TARGET: ${{ inputs.target }}
+      - name: Save screenshot and verification report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-update-proof
+          path: docs/qa/installed-update/
+          retention-days: 3
