@@ -60,3 +60,5 @@ function renderMotion(preference){
  $('#motion-status').textContent=preference===true?'Les personnages restent immobiles ; leurs états continuent de changer.':preference===false?'Animations activées, y compris en arrière-plan.':motionMedia.matches?'Ton système réduit les animations : les personnages restent immobiles. Choisis « Activées » pour les animer dans Agentibou.':'Les animations suivent le réglage de ton système.';
 }
 motionMedia.addEventListener('change',()=>{if(current)renderMotion(current.settings.reducedMotion);});
+
+$('#open-diagnostics').onclick=()=>window.agentibou.openDiagnostics();

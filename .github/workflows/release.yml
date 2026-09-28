@@ -48,6 +48,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Test companion recovery on the target OS
+        run: npm run test:recovery
       - name: Test background animations on the target OS
         run: npm run test:background
       - name: Build Windows installer

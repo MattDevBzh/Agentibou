@@ -25,7 +25,10 @@ let drag=null;
 character.addEventListener('pointerdown',e=>{if(e.button!==0)return;drag={x:e.screenX,y:e.screenY,position:current.petPosition||[0,0]};character.setPointerCapture(e.pointerId);});
 character.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.screenX-drag.x,dy=e.screenY-drag.y;if(Math.hypot(dx,dy)>5)window.agentibou.movePet(drag.position[0]+dx,drag.position[1]+dy);});
 character.addEventListener('pointerup',()=>drag=null);character.addEventListener('pointercancel',()=>drag=null);
-window.agentibou.onState(render);window.agentibou.getState().then(render);window.agentibou.onDemo(state=>{demo=state;clearTimeout(demoTimer);if(state)demoTimer=setTimeout(()=>{demo=null;render(current);},12000);render(current);});document.querySelector('#open-panel').onclick=()=>window.agentibou.showPanel();
+function renderState(s){try{render(s);window.agentibou.petRendered();}catch{window.agentibou.petRenderError();}}
+window.addEventListener('error',()=>window.agentibou.petRenderError());
+window.addEventListener('unhandledrejection',()=>window.agentibou.petRenderError());
+window.agentibou.onState(renderState);window.agentibou.getState().then(renderState);window.agentibou.onDemo(state=>{demo=state;clearTimeout(demoTimer);if(state)demoTimer=setTimeout(()=>{demo=null;render(current);},12000);render(current);});document.querySelector('#open-panel').onclick=()=>window.agentibou.showPanel();
 
 for(const [id,delta] of [['shrink-pet',-.1],['grow-pet',.1]])document.getElementById(id).onclick=()=>{const scale=current.petControls?.find(p=>p.provider===current.provider)?.scale||1;window.agentibou.petAppearance(current.provider,{scale:Math.max(.6,Math.min(1.5,Math.round((scale+delta)*100)/100))});};
 document.querySelector('#hide-pet').onclick=()=>window.agentibou.petAppearance(current.provider,{hidden:true});

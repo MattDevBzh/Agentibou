@@ -1,5 +1,5 @@
 'use strict';
-const {app,BrowserWindow,ipcMain,screen,Tray,Menu,nativeImage,dialog,shell,net}=require('electron');
+const {app,BrowserWindow,ipcMain,screen,Tray,Menu,nativeImage,dialog,shell,net,powerMonitor}=require('electron');
 const fs=require('node:fs');const os=require('node:os');const path=require('node:path');
 const {visibleProviders,CompanionLibrary,cleanSelection,selectedCompanion,cleanName,imageType,PROVIDERS}=require('./companions.cjs');
 const {destination}=require('./navigation.cjs');
@@ -9,6 +9,8 @@ const {UsageStore}=require('./usage.cjs');
 const {petLayout,petPreference,PET_PROVIDERS}=require('./pet-layout.cjs');
 const {SessionStore}=require('./state.cjs');const {Watcher}=require('./watcher.cjs');const {install}=require('./integrations.cjs');
 const ROOT=require('../scripts/bridge.cjs').dataRoot();
+const {createDiagnostics}=require('./diagnostics.cjs');
+const diagnostics=createDiagnostics(ROOT);
 app.setName('Agentibou');
 app.setPath('userData',path.join(ROOT,'electron'));
 const library=new CompanionLibrary(ROOT,path.join(__dirname,'assets','vic.webp'));
@@ -24,6 +26,27 @@ const updates=new UpdateManager({
 });
 updates.on('change',state=>{if(panel&&!panel.isDestroyed())panel.webContents.send('update-state',state);});
 const pets=new Map();
+const RENDER_TIMEOUT=20000;
+let suspended=false,lastTick=Date.now();
+function logPet(p,event,extra={}){diagnostics.log(event,{provider:p.provider,windowId:p.id,...(!p.window.isDestroyed()?{visible:p.window.isVisible(),minimized:p.window.isMinimized(),bounds:p.window.getBounds()}:{}),...extra});}
+function retirePet(p,reason){
+ if(pets.get(p.provider)!==p)return;logPet(p,'pet-retired',{reason});pets.delete(p.provider);
+ if(p.window.isDestroyed())return;
+ // Let the last action's IPC reply finish before retiring an idle provider.
+ if(reason==='no-longer-needed'){p.window.hide();setTimeout(()=>{if(!p.window.isDestroyed())p.window.destroy();},150);}
+ else p.window.destroy();
+}
+function rebuildPets(reason){for(const p of [...pets.values()])retirePet(p,reason);if(!quitting)safeSend();}
+function safeSend(){try{send();}catch(error){diagnostics.log('state-error',{code:error.code||error.name});}}
+function tick(){
+ const now=Date.now(),gap=now-lastTick;lastTick=now;
+ if(quitting||suspended)return;
+ // Sleep and main-process stalls must not count as a renderer timeout.
+ if(gap>RENDER_TIMEOUT)for(const p of pets.values()){p.lastRender=now;p.createdAt=now;}
+ for(const p of [...pets.values()])if(now-(p.ready?p.lastRender:p.createdAt)>RENDER_TIMEOUT)retirePet(p,p.ready?'renderer-timeout':'startup-timeout');
+ try{watcher.poll();}catch(error){diagnostics.log('watcher-error',{code:error.code||error.name});}
+ safeSend();
+}
 const settingsFile=path.join(ROOT,'preferences.json');
 try{settings=JSON.parse(fs.readFileSync(settingsFile,'utf8'));}catch{}
 if(Array.isArray(settings.dismissedConversations))store.dismissed=new SessionStore(settings.dismissedConversations).dismissed;
@@ -31,17 +54,25 @@ if(Array.isArray(settings.dismissedConversations))store.dismissed=new SessionSto
 function saveSettings(){fs.mkdirSync(ROOT,{recursive:true});fs.writeFileSync(settingsFile,JSON.stringify(settings,null,2));}
 function secureWindow(options,{backgroundThrottling=true}={}){const w=new BrowserWindow({...options,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,backgroundThrottling}});w.webContents.setWindowOpenHandler(()=>({action:'deny'}));w.webContents.on('will-navigate',e=>e.preventDefault());return w;}
 function snapshot(provider=null){const state=store.snapshot(Date.now(),provider);const companions=library.list(),selection=cleanSelection(settings.companions,companions);const companionProvider=PROVIDERS.includes(provider)?provider:state.focus?.provider||null;return {...state,provider,usage:usage.snapshot(companionProvider,state.focus?.session),conversations:state.conversations.map(e=>({...e,destination:e.state==='done'?destination(e):null})),companions,companionSelection:selection,companionProvider,companion:selectedCompanion(selection,companions,companionProvider),completion:state.completion?{...state.completion,destination:destination(state.completion)}:null,diagnostics:watcher.status,settings,petsVisible,petControls:PET_PROVIDERS.map(provider=>({provider,...petPreference(settings,provider),present:visibleProviders(state.conversations,selection,settings.keepAssignedVisible!==false).includes(provider)})),platform:process.platform,home:ROOT};}
-function petFor(sender){return [...pets.values()].find(p=>p.window.webContents===sender);}
+function petFor(sender){return [...pets.values()].find(p=>!p.window.isDestroyed()&&p.window.webContents===sender);}
 function petSnapshot(p){const s=snapshot(p.provider);resizePet(p,s);s.petPosition=p.window.getPosition();return s;}
-function syncPets(s){const wanted=visibleProviders(s.conversations,s.companionSelection,settings.keepAssignedVisible!==false);for(const [key,p] of pets)if(!wanted.includes(key)){pets.delete(key);p.window.hide();setTimeout(()=>{if(!p.window.isDestroyed())p.window.destroy();},150);}for(const provider of wanted)if(!pets.has(provider))createPet(provider);}
+function syncPets(s){const wanted=visibleProviders(s.conversations,s.companionSelection,settings.keepAssignedVisible!==false);for(const [key,p] of pets)if(!wanted.includes(key))retirePet(p,'no-longer-needed');for(const provider of wanted)if(!pets.has(provider)&&!quitting)createPet(provider);}
 function send(){const s=snapshot();syncPets(s);if(panel&&!panel.isDestroyed())panel.webContents.send('state',s);for(const p of pets.values())if(!p.window.isDestroyed()){const state=petSnapshot(p);p.window.setTitle((state.companion?.name||'Compagnon')+' · '+(PROVIDERS.includes(p.provider)?p.provider:'Agentibou'));p.window.webContents.send('state',state);applyPetVisibility(p);}}
-function applyPetVisibility(p){if(p.window.isDestroyed()||!p.ready)return;const visible=petsVisible&&!petPreference(settings,p.provider).hidden;if(visible&&!p.window.isVisible())p.window.showInactive();else if(!visible&&p.window.isVisible())p.window.hide();}
+function applyPetVisibility(p){
+ const w=p.window;if(w.isDestroyed()||!p.ready)return;
+ const visible=petsVisible&&!petPreference(settings,p.provider).hidden;
+ if(visible){
+  if(w.isMinimized()){logPet(p,'pet-repair',{reason:'minimized'});w.restore();}
+  if(!w.isAlwaysOnTop()){logPet(p,'pet-repair',{reason:'lost-topmost'});w.setAlwaysOnTop(true);}
+  if(!w.isVisible()){logPet(p,'pet-show');w.showInactive();}
+ }else if(w.isVisible()){logPet(p,'pet-hide',{reason:'user-preference'});w.hide();}
+}
 function resizePet(p,s){const pet=p.window;if(pet.isDestroyed())return;const bounds=pet.getBounds(),area=screen.getDisplayMatching(bounds).workArea;const layout=petLayout(s.conversations.length,s.usage.length?1:0,area.height,petPreference(settings,p.provider).scale,area.width);const x=Math.max(area.x,Math.min(bounds.x,area.x+area.width-layout.width)),y=Math.max(area.y,Math.min(bounds.y+p.top-Math.round(layout.topHeight*layout.scale),area.y+area.height-layout.height));p.top=Math.round(layout.topHeight*layout.scale);if(bounds.width!==layout.width||bounds.height!==layout.height||bounds.x!==x||bounds.y!==y)pet.setBounds({x,y,width:layout.width,height:layout.height});s.petLayout=layout;}
-function togglePets(){petsVisible=!petsVisible;for(const p of pets.values())applyPetVisibility(p);send();return petsVisible;}
+function togglePets(){petsVisible=!petsVisible;diagnostics.log('visibility-toggle',{visible:petsVisible});for(const p of pets.values())applyPetVisibility(p);send();return petsVisible;}
 function restorePets(){
  petsVisible=true;settings.petAppearance||={};
  for(const provider of PET_PROVIDERS)settings.petAppearance[provider]={...petPreference(settings,provider),hidden:false};
- saveSettings();send();return {restored:true};
+ saveSettings();rebuildPets('manual-restore');return {restored:true};
 }
 function acknowledge(key,at){const removed=store.acknowledge(key,at);if(removed){settings.dismissedConversations=[...store.dismissed];saveSettings();}return removed;}
 function showPanel(){if(panel&&!panel.isDestroyed()){panel.show();panel.focus();return;}
@@ -58,11 +89,18 @@ function placePet(provider){
  return bounds;
 }
 // Companions normally run unfocused: keep their sprite timer and painting active.
-function createPet(provider){const window=secureWindow({...placePet(provider),show:false,frame:false,transparent:true,resizable:false,hasShadow:false,alwaysOnTop:true,skipTaskbar:true,title:'Agentibou · '+provider},{backgroundThrottling:false});const p={window,provider,top:0,ready:false};pets.set(provider,p);window.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
+function createPet(provider){
+ const window=secureWindow({...placePet(provider),show:false,frame:false,transparent:true,resizable:false,minimizable:false,hasShadow:false,alwaysOnTop:true,skipTaskbar:true,title:'Agentibou · '+provider},{backgroundThrottling:false});
+ const p={window,id:window.id,provider,top:0,ready:false,createdAt:Date.now(),lastRender:Date.now()};pets.set(provider,p);window.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});logPet(p,'pet-created');
  // Remove only this instance: a retired window can close after its replacement exists.
- window.on('closed',()=>{if(pets.get(provider)===p)pets.delete(provider);});
- window.webContents.on('render-process-gone',()=>{if(!window.isDestroyed())window.destroy();});
- window.once('ready-to-show',()=>{if(!window.isDestroyed()&&pets.get(provider)===p){p.ready=true;applyPetVisibility(p);}});window.loadFile(path.join(__dirname,'pet.html'),{query:{provider}});window.on('moved',()=>{if(window.isDestroyed())return;const [x,y]=window.getPosition();settings.positions||={};settings.positions[provider]={x,y};saveSettings();});}
+ window.on('closed',()=>{diagnostics.log('pet-closed',{provider,quitting});if(pets.get(provider)===p)pets.delete(provider);});
+ for(const event of ['hide','show','minimize','restore','unresponsive','responsive'])window.on(event,()=>logPet(p,'window-'+event));
+ window.webContents.on('render-process-gone',(_,details)=>{logPet(p,'renderer-gone',{reason:details.reason,exitCode:details.exitCode});retirePet(p,'renderer-gone');});
+ window.webContents.on('did-fail-load',(_,code,_description,_url,mainFrame)=>{if(mainFrame)logPet(p,'load-failed',{code});});
+ window.once('ready-to-show',()=>{if(!window.isDestroyed()&&pets.get(provider)===p){p.ready=true;logPet(p,'pet-ready');applyPetVisibility(p);}});
+ window.loadFile(path.join(__dirname,'pet.html'),{query:{provider}}).catch(error=>logPet(p,'load-rejected',{code:error.code||error.name}));
+ window.on('moved',()=>{if(window.isDestroyed())return;const [x,y]=window.getPosition();settings.positions||={};settings.positions[provider]={x,y};try{saveSettings();}catch(error){diagnostics.log('settings-write-error',{code:error.code||error.name});}});
+}
 if(!app.requestSingleInstanceLock())app.quit();else{
  app.on('second-instance',()=>showPanel());
  app.whenReady().then(()=>{
@@ -79,11 +117,20 @@ if(!app.requestSingleInstanceLock())app.quit();else{
   if(process.platform==='darwin')trayIcon.setTemplateImage(true);
   tray=new Tray(trayIcon);tray.setToolTip('Agentibou · Compagnons');
   tray.setContextMenu(Menu.buildFromTemplate([{label:'Ouvrir Agentibou',click:showPanel},{label:'Afficher / masquer les compagnons',click:togglePets},{label:'Réafficher tous les compagnons',click:restorePets},{type:'separator'},{label:'Quitter Agentibou',click:()=>{quitting=true;app.quit();}}]));tray.on('click',showPanel);
-  updates.start();watcher.poll();send();timer=setInterval(()=>{watcher.poll();send();},1000);
+  diagnostics.log('app-start',{version:app.getVersion(),platform:process.platform,osRelease:os.release(),electron:process.versions.electron});
+  powerMonitor.on('suspend',()=>{suspended=true;diagnostics.log('power-suspend');});
+  powerMonitor.on('resume',()=>{suspended=false;lastTick=Date.now();diagnostics.log('power-resume');rebuildPets('resume');});
+  powerMonitor.on('unlock-screen',()=>{diagnostics.log('screen-unlock');rebuildPets('unlock');});
+  for(const event of ['display-added','display-removed','display-metrics-changed'])screen.on(event,()=>{diagnostics.log(event);safeSend();});
+  updates.start();tick();timer=setInterval(tick,1000);
 
  });
 }
-app.on('before-quit',()=>{quitting=true;updates.stop();clearInterval(timer);});app.on('activate',showPanel);app.on('window-all-closed',()=>{});
+app.on('child-process-gone',(_,details)=>{diagnostics.log('child-process-gone',{type:details.type,reason:details.reason,exitCode:details.exitCode});if(details.type==='GPU'&&!quitting&&app.isReady())rebuildPets('gpu-process-gone');});
+app.on('before-quit',()=>{diagnostics.log('app-quit');quitting=true;updates.stop();clearInterval(timer);});app.on('activate',showPanel);app.on('window-all-closed',()=>{});
+ipcMain.on('pet-rendered',event=>{const p=petFor(event.sender);if(p)p.lastRender=Date.now();});
+ipcMain.on('pet-render-error',event=>{const p=petFor(event.sender);if(p)logPet(p,'renderer-error');});
+ipcMain.handle('open-diagnostics',event=>event.sender===panel?.webContents?shell.openPath(diagnostics.directory):null);
 ipcMain.handle('get-update-state',event=>event.sender===panel?.webContents?updates.snapshot():null);
 ipcMain.handle('check-updates',event=>event.sender===panel?.webContents?updates.check():null);
 ipcMain.handle('install-update',event=>event.sender===panel?.webContents?updates.install():null);
@@ -97,6 +144,7 @@ ipcMain.handle('pet-appearance',(event,provider,value)=>{
  if(!PET_PROVIDERS.includes(provider)||(senderPet&&senderPet.provider!==provider)||(!senderPet&&event.sender!==panel?.webContents))return {error:'Compagnon indisponible.'};
  if(!value||typeof value!=='object'||(value.scale!==undefined&&(!Number.isFinite(value.scale)||value.scale<.6||value.scale>1.5))||(value.hidden!==undefined&&typeof value.hidden!=='boolean'))return {error:'Réglage invalide.'};
  settings.petAppearance||={};settings.petAppearance[provider]={...petPreference(settings,provider),...(value.scale!==undefined?{scale:Math.round(value.scale*100)/100}:{}),...(value.hidden!==undefined?{hidden:value.hidden}:{})};
+ diagnostics.log('pet-preference',{provider,...(value.hidden!==undefined?{hidden:value.hidden}:{}),...(value.scale!==undefined?{scale:value.scale}:{})});
  if(value.hidden===false)petsVisible=true;
  saveSettings();send();return {saved:true};
 });
