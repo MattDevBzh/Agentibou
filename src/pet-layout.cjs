@@ -1,5 +1,5 @@
 'use strict';
-const PET_PROVIDERS=['idle','codex','claude','copilot','visualstudio'];
+const PET_PROVIDERS=['idle','codex','claude','copilot','copilot-cli','visualstudio'];
 function petPreference(settings,provider){
  const value=settings.petAppearance?.[provider];
  return {scale:Number.isFinite(value?.scale)?Math.max(.6,Math.min(1.5,Math.round(value.scale*100)/100)):1,hidden:value?.hidden===true};

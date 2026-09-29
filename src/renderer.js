@@ -1,6 +1,6 @@
 'use strict';
 const $=s=>document.querySelector(s), sprite=new VicSprite($('.sprite'));
-const names={codex:'Codex',claude:'Claude Code',copilot:'Copilot · VS Code',visualstudio:'Copilot · Visual Studio'};
+const names={codex:'Codex',claude:'Claude Code',copilot:'Copilot · VS Code','copilot-cli':'Copilot CLI',visualstudio:'Copilot · Visual Studio'};
 const labels={idle:'Au repos',thinking:'En réflexion',working:'Au travail',done:'Réponse terminée',waiting:'En attente',error:'Une erreur est survenue'};
 const copy={idle:['La pause est\nun art aussi.','Vic garde le ballon au chaud, en attendant ta prochaine idée.'],thinking:['Une idée\nse prépare.','Vic prend le temps de réfléchir, sans quitter le ballon des yeux.'],working:['Ça cogite.\nÇa pianote.','Ton agent est au travail. Vic aussi : chacun son clavier, même équipe.'],done:['Et une tâche\nde moins !','L’agent a fini sa réponse. Petit shoot de victoire, puis à toi de jouer.'],waiting:['À toi\nde jouer.','Une réponse ou une vérification peut être nécessaire. Jette un œil à la session.'],error:['Petit temps\nmort.','L’agent a signalé une erreur. La session contient les détails pour repartir.']};
 let current={state:'idle',sessions:[],settings:{}},demo=null,demoTimer,toastTimer;

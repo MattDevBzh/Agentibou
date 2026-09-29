@@ -30,8 +30,11 @@ Les premières distributions sont en bêta, sans signature éditeur ni notarisat
 |---|---|---|
 | Codex local | Journaux de l’app / CLI détectés automatiquement | Format interne ; sessions cloud non synchronisées |
 | Claude Code | Bouton « Connecter sur ce poste », puis redémarrage des sessions | Hooks locaux |
+| Copilot CLI | Bouton « CLI · Ce poste », puis redémarrage des sessions | Hooks utilisateur, tous les projets locaux ; version récente du CLI requise |
 | Copilot / VS Code | Bouton VS Code pour chaque projet | Mode Agent, hooks autorisés dans le projet |
 | Copilot / Visual Studio | Bouton Visual Studio pour chaque solution, outil `agentibou_state` activé dans le chat | MCP indicatif : dépend des appels de l’agent |
+
+Copilot CLI utilise les [hooks officiels GitHub](https://docs.github.com/en/copilot/reference/hooks-reference) dans `~/.copilot/hooks/agentibou.json` (ou `$COPILOT_HOME/hooks/agentibou.json`). Le compagnon suit le début des prompts, les outils, la fin de chaque réponse et les erreurs. Aucun prompt ni résultat d’outil n’est conservé. Sans identifiant de session fourni par une ancienne version du CLI, les sessions du même dossier sont regroupées. Le bouton de retour ouvre le dossier du projet ; retrouve ensuite la session dans ton terminal.
 
 Dans Visual Studio, demander à l’agent d’appeler `agentibou_state` au début et à la fin de son travail. Les sessions WSL, SSH, conteneurs et cloud ne sont pas automatiquement synchronisées avec le bureau local.
 
@@ -49,7 +52,7 @@ Le suivi des agents reste sur ton ordinateur. Le bridge ne conserve pas les prom
 
 Les données sont dans `~/.agentibou` (`%USERPROFILE%\.agentibou` sur Windows). Si `~/.avatai` existe déjà, il est réutilisé pour préserver les anciens hooks, préférences et compagnons. Les variables `AGENTIBOU_HOME` et `AGENTIBOU_CLAUDE_DESKTOP_HOME` permettent d’isoler les tests ; les anciennes variables `AVATAI_*` restent compatibles.
 
-Les connexions sauvegardent les configurations modifiées. Pour déconnecter, retirer les entrées Agentibou des hooks Claude, du fichier `.github/hooks/agentibou.json` ou du serveur `agentibou` dans `.vs/mcp.json`. Désinstaller l’application ne supprime pas automatiquement les données personnelles. Aucun démarrage automatique à la connexion du système n’est installé.
+Les connexions sauvegardent les configurations modifiées. Pour déconnecter, retirer les entrées Agentibou des hooks Claude, du fichier `~/.copilot/hooks/agentibou.json` (ou sous `COPILOT_HOME`), du fichier `.github/hooks/agentibou.json` ou du serveur `agentibou` dans `.vs/mcp.json`. Désinstaller l’application ne supprime pas automatiquement les données personnelles. Aucun démarrage automatique à la connexion du système n’est installé.
 
 ## Développer
 

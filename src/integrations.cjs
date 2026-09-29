@@ -9,9 +9,22 @@ function command(exe,bridge,provider,state,windows=false){
 }
 function ownsCommand(command,stable){if(typeof command!=='string')return false;if(command.includes(stable))return true;const encoded=command.match(/-EncodedCommand ([A-Za-z0-9+/=]+)$/);return !!encoded&&Buffer.from(encoded[1],'base64').toString('utf16le').includes(stable);}
 function hook(exe,bridge,provider,state){return {type:'command',command:command(exe,bridge,provider,state),windows:command(exe,bridge,provider,state,true),env:{ELECTRON_RUN_AS_NODE:'1'},timeout:3};}
-function install(kind,{home,root,exe,bridge,project,claudeConfig}){
+function install(kind,{home,root,exe,bridge,project,claudeConfig,copilotHome}){
   fs.mkdirSync(root,{recursive:true,mode:0o700});
   const stable=path.join(root,'bridge.cjs');fs.copyFileSync(bridge,stable);
+  if(kind==='copilot-cli'){
+    const file=path.join(copilotHome||path.join(home,'.copilot'),'hooks','agentibou.json');
+    const existing=readJSON(file);
+    if(fs.existsSync(file)&&existing?._agentibou!==true)throw new Error('Un fichier agentibou.json existe déjà et n’appartient pas à Agentibou. Il n’a pas été modifié.');
+    const hooks={};
+    const events={sessionStart:'idle',userPromptSubmitted:'thinking',preToolUse:'working',postToolUse:'thinking',postToolUseFailure:'error',agentStop:'done',errorOccurred:'error',sessionEnd:'idle'};
+    for(const [event,state] of Object.entries(events))hooks[event]=[{
+      type:'command',bash:command(exe,stable,'copilot-cli',state),powershell:command(exe,stable,'copilot-cli',state,true),
+      env:{ELECTRON_RUN_AS_NODE:'1',AGENTIBOU_HOME:root},timeoutSec:3
+    }];
+    save(file,{_agentibou:true,version:1,hooks});
+    return {file,message:'GitHub Copilot CLI connecté sur ce poste pour tous tes projets. Redémarre ses sessions pour charger les hooks.'};
+  }
   if(kind==='claude'){
     const file=path.join(claudeConfig||path.join(home,'.claude'),'settings.json'),d=readJSON(file);d.hooks ||= {};
     const map={UserPromptSubmit:'thinking',PreToolUse:'working',PostToolUse:'thinking',Stop:'done',SessionEnd:'idle',PermissionRequest:'waiting',StopFailure:'error'};

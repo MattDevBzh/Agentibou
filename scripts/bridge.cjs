@@ -15,7 +15,7 @@ function dataRoot(env = process.env, home = os.homedir()) {
 const ROOT = dataRoot();
 const STATES = new Set(['idle', 'thinking', 'working', 'done', 'waiting', 'error']);
 function normalize(provider, state, input = {}) {
-  if (!['claude', 'codex', 'copilot', 'visualstudio'].includes(provider) || !STATES.has(state)) throw new Error('Invalid event');
+  if (!['claude', 'codex', 'copilot', 'copilot-cli', 'visualstudio'].includes(provider) || !STATES.has(state)) throw new Error('Invalid event');
   const cwd = typeof input.cwd === 'string' ? input.cwd : process.cwd();
   const session = input.session_id || input.sessionId || input['thread-id'] || input.session || cwd;
   return { provider, state, session: String(session).slice(0, 250), project: path.basename(cwd).slice(0, 100), cwd, at: Date.now() };

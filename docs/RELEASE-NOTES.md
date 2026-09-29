@@ -1,11 +1,13 @@
-# Agentibou 0.7.2
+# Agentibou 0.7.3
 
-- Récupération automatique d’un compagnon dont le rendu est bloqué ou n’a pas démarré après 20 secondes, en complément de la récupération après crash.
-- Réparation des fenêtres minimisées ou ayant perdu leur présence au premier plan ; reconstruction des surfaces transparentes après retour de veille, déverrouillage ou arrêt du processus graphique.
-- « Réafficher tous les compagnons » reconstruit maintenant les fenêtres : plus besoin de redémarrer toute l’application pour tenter de récupérer un avatar invisible.
-- Journaux locaux accessibles via « Journaux de diagnostic », avec rotation automatique et sans contenu de conversations.
-- Tests de récupération exécutés sur Windows et macOS avant publication, y compris blocage du rendu et simulations de veille/perte du processus graphique.
+- GitHub Copilot CLI rejoint les outils suivis, avec son propre compagnon et ses réglages de taille et de visibilité.
+- Le bouton « CLI · Ce poste » connecte tous les projets locaux via les hooks utilisateur de Copilot CLI, en respectant aussi `COPILOT_HOME`.
+- Suivi du début des prompts, des appels d’outils, de la fin de chaque réponse et des erreurs. Les prompts, arguments et réponses ne sont pas conservés.
+- Les configurations tierces sont préservées et les reconnexions ne dupliquent pas les hooks Agentibou.
+- Le retour à une session CLI ouvre le dossier du projet ; retrouve la conversation dans ton terminal.
 
-La disparition intermittente sur le PC utilisateur n’a pas été reproduite directement. Ces correctifs couvrent plusieurs causes possibles ; les journaux permettront d’identifier un éventuel cas restant.
+Pour activer le suivi après la mise à jour : cliquer sur **CLI · Ce poste** dans la carte GitHub Copilot, puis redémarrer les sessions de Copilot CLI. Une version récente du CLI prenant en charge les hooks utilisateur est nécessaire. Les sessions WSL, SSH, conteneurs et cloud ne sont pas synchronisées automatiquement.
+
+Les hooks et l’interface ont été testés avec des événements simulés ; une conversation Copilot réelle reste à valider.
 
 Bêta non signée / non notariée. Sous Windows, rechercher la mise à jour dans Agentibou puis cliquer sur « Redémarrer pour installer ». Sur Mac non signé, télécharger la nouvelle version.

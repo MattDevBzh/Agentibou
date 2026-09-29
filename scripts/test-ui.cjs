@@ -2,7 +2,7 @@ const {_electron:electron}=require('playwright');
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 (async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'agentibou-ui-')),events=path.join(root,'events'),qa=path.resolve('docs/qa');fs.mkdirSync(events);fs.mkdirSync(qa,{recursive:true});let app,clock=Date.now();const errors=[];
- const env={...process.env,AGENTIBOU_HOME:root,CODEX_HOME:path.join(root,'none'),AGENTIBOU_CLAUDE_DESKTOP_HOME:path.join(root,'claude-desktop')};
+ const env={...process.env,AGENTIBOU_HOME:root,COPILOT_HOME:path.join(root,'copilot'),CODEX_HOME:path.join(root,'none'),AGENTIBOU_CLAUDE_DESKTOP_HOME:path.join(root,'claude-desktop')};
  const launch=async()=>{app=await electron.launch({args:[path.resolve('.')],env});app.on('window',w=>w.on('pageerror',e=>errors.push(e.message)));for(const w of app.windows())w.on('pageerror',e=>errors.push(e.message));};
  const page=async(provider)=>{for(let i=0;i<100;i++){const p=app.windows().find(w=>!w.isClosed()&&(provider?new URL(w.url()||'about:blank').searchParams.get('provider')===provider:w.url().endsWith('index.html')));if(p){await p.waitForFunction(()=>!!window.agentibou);return p;}await new Promise(r=>setTimeout(r,100));}throw Error('Missing window '+provider);};
  const write=(file,e)=>{clock=Math.max(Date.now(),clock+1);fs.writeFileSync(path.join(events,file+'.json'),JSON.stringify({...e,at:clock}));return clock;};
@@ -12,6 +12,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
  try{
   await launch();let dashboard=await page(),idle=await page('idle');
   assert.match(await dashboard.title(),/^Agentibou/);
+  await app.evaluate(({dialog})=>{dialog.showOpenDialog=async()=>{throw Error('CLI connection must not ask for a project');};});
+  await dashboard.locator('[data-install="copilot-cli"]').click();
+  await dashboard.waitForFunction(()=>document.querySelector('#toast').textContent.includes('Copilot CLI connecté'));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'copilot','hooks','agentibou.json'))).version,1);
+  await dashboard.locator('#connections').screenshot({path:path.join(qa,'copilot-cli-connections.png')});
   assert.equal(await dashboard.locator('.brand').innerText().then(s=>s.includes('Agentibou')),true);
   for(const [s,description] of [['idle','repos'],['thinking','réflexion'],['working','travail'],['done','célèbre']]){await dashboard.locator(`[data-demo="${s}"]`).click();await state(idle,description);await idle.screenshot({path:path.join(qa,'pet-'+s+'.png')});if(s==='working'){const a=await idle.locator('.sprite').evaluate(e=>e.style.backgroundPosition);await new Promise(r=>setTimeout(r,200));assert.notEqual(await idle.locator('.sprite').evaluate(e=>e.style.backgroundPosition),a);}}
   await dashboard.locator('#motion-mode').selectOption('reduced');await dashboard.locator('[data-demo="thinking"]').click();await state(idle,'réflexion');const first=await idle.locator('.sprite').evaluate(e=>e.style.backgroundPosition);await new Promise(r=>setTimeout(r,350));assert.equal(await idle.locator('.sprite').evaluate(e=>e.style.backgroundPosition),first);await dashboard.locator('#motion-mode').selectOption('full');await dashboard.locator('#end-demo').click();
@@ -58,7 +63,18 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
   await app.evaluate(({shell})=>{shell.openExternal=async()=>{throw Error('No handler');};});write('code',{...c,state:'done'});await row(codex,'codex',id).locator('.conversation-dismiss').waitFor();await row(codex,'codex',id).locator('.conversation-open').click();assert.equal(await row(codex,'codex',id).count(),1);await row(codex,'codex',id).locator('.conversation-dismiss').click();await count(codex,1);
   // New activity restores Claude's own companion, including while all pets are hidden.
   await dashboard.locator('#toggle-pet').click();write('claude',{...cl,state:'thinking'});claude=await page('claude');await count(claude,1);await new Promise(r=>setTimeout(r,200));assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().filter(w=>w.webContents.getURL().includes('pet.html?provider=')).every(w=>!w.isVisible())),true);await dashboard.locator('#toggle-pet').click();await state(claude,'réflexion');assert.equal(await claude.locator('.sprite').getAttribute('data-companion-id'),imported.id);
-  for(const provider of ['copilot','visualstudio']){write(provider,{provider,session:provider,project:provider,state:'working'});const p=await page(provider);await count(p,1);await state(p,'travail');write(provider,{provider,session:provider,project:provider,state:'idle'});await p.waitForEvent('close');}
+  for(const provider of ['copilot','copilot-cli','visualstudio']){write(provider,{provider,session:provider,project:provider,state:'working'});const p=await page(provider);await count(p,1);await state(p,'travail');
+   if(provider==='copilot-cli'){
+    await dashboard.locator('[data-provider="copilot-cli"]').selectOption(imported.id);
+    await p.waitForFunction(id=>document.querySelector('.sprite').dataset.companionId===id,imported.id);
+    assert.equal((await dashboard.evaluate(()=>window.agentibou.getState())).companionSelection.assignments.copilot,undefined);
+    write(provider,{provider,session:provider,project:provider,cwd:root,state:'done'});
+    await state(p,'célèbre');assert.equal(await row(p,provider,provider).locator('.conversation-open').isEnabled(),true);
+    await p.screenshot({path:path.join(qa,'copilot-cli-companion.png')});
+    await Promise.all([p.waitForEvent('close'),row(p,provider,provider).locator('.conversation-dismiss').click()]);
+    continue;
+   }
+   write(provider,{provider,session:provider,project:provider,state:'idle'});await p.waitForEvent('close');}
   for(let i=0;i<10;i++)write('bulk'+i,{provider:'codex',session:'bulk'+i,project:'Projet '+i,cwd:'/tmp/project'+i,state:'thinking'});await count(codex,11);assert.equal(await codex.locator('#conversations').evaluate(e=>e.scrollHeight>e.clientHeight),true);assert.equal(await codex.locator('#projects').count(),0);await codex.locator('.conversation').last().scrollIntoViewIfNeeded();await codex.screenshot({path:path.join(qa,'many-conversations.png')});assert.equal(await codex.evaluate(()=>document.documentElement.scrollHeight>innerHeight),false);
   await dashboard.locator('#keep-assigned-visible').check();write('claude',{...cl,state:'idle'});await count(claude,0);await state(claude,'repos');assert.equal(await claude.locator('#idle-status').isVisible(),true);
   // Data comes from real reader paths, never invented for absent providers.
@@ -73,11 +89,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
   await codex.locator('#pet-character').hover();assert.equal(await codex.evaluate(()=>{const r=document.querySelector('.pet-shell').getBoundingClientRect();return r.top===0&&r.left===0&&Math.abs(r.bottom-innerHeight)<=1&&scrollY===0;}),true);await codex.screenshot({path:path.join(qa,'pet-resize-controls.png')});
   await setSize('codex',80);await setSize('claude',130);await sizeRow('claude').getByRole('button',{name:'Masquer · Claude Code',exact:true}).click();
   await sizeRow('codex').scrollIntoViewIfNeeded();await dashboard.screenshot({path:path.join(qa,'individual-settings.png')});
-  const before=await dashboard.evaluate(()=>window.agentibou.getState());assert.equal(before.companionSelection.assignments.claude,imported.id);assert.deepEqual(errors,[]);
+  const before=await dashboard.evaluate(()=>window.agentibou.getState());assert.equal(before.companionSelection.assignments.claude,imported.id);assert.equal(before.companionSelection.assignments['copilot-cli'],imported.id);assert.deepEqual(errors,[]);
   await app.close();app=null;await launch();dashboard=await page();codex=await page('codex');claude=await page('claude');await count(codex,11);await count(claude,0);assert.equal(await claude.locator('#idle-status').isVisible(),true);assert.equal(await claude.locator('.sprite').getAttribute('data-companion-id'),imported.id);assert.equal(await row(codex,'codex',id).count(),0);assert.equal(await row(codex,'codex','third').count(),0);
   assert.equal((await nativePet('claude')).visible,false);assert.equal((await nativePet('codex')).visible,true);assert.equal((await nativePet('codex')).bounds.width,240);assert.equal((await nativePet('claude')).bounds.width,390);
   await sizeRow('claude').getByRole('button',{name:'Réafficher · Claude Code',exact:true}).click();assert.equal((await nativePet('claude')).visible,true);
-  assert.equal(await dashboard.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  assert.equal(await dashboard.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal((await dashboard.evaluate(()=>window.agentibou.getState())).companionSelection.assignments['copilot-cli'],imported.id);
   console.log('UI OK: independent resize/hide controls, screen fit, recovery and persistence; separate windows per tool; different companions; isolated conversations/projects; priorities; exact native links; close/open acknowledgements; persistent dismissal; new turn; hidden-window lifecycle; scrolling; unchanged image import; animation previews and reduced motion.');
  }finally{if(app)await app.close();fs.rmSync(root,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});

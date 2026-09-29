@@ -1,6 +1,6 @@
 {
   "name": "agentibou",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": true,
   "description": "Un compagnon de bureau pour vos agents de développement",
   "main": "src/main.cjs",

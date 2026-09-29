@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');const {pathToFileURL}=require('node:url');
-const PROVIDERS=['codex','claude','copilot','visualstudio'];
+const PROVIDERS=['codex','claude','copilot','copilot-cli','visualstudio'];
 const TOKTOKETTE_ID='600ddd0f-4e99-482f-bc26-5f23d165e82d';
 const validId=id=>typeof id==='string'&&/^[0-9a-f-]{36}$/.test(id);
 function cleanName(name){if(typeof name!=='string')throw new Error('Donne un nom au compagnon.');const n=name.replace(/[\x00-\x1f]/g,'').trim();if(!n||n.length>40)throw new Error('Le nom doit contenir de 1 à 40 caractères.');return n;}

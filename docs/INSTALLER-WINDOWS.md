@@ -10,6 +10,7 @@ La bêta initiale n’est pas signée. Windows peut afficher un avertissement : 
 
 - **Codex local** : ses sessions sont détectées automatiquement.
 - **Claude Code** : cliquer « Connecter sur ce poste », puis redémarrer les sessions.
+- **Copilot CLI** : cliquer « CLI · Ce poste », puis redémarrer les sessions du CLI. Connexion pour tous les projets locaux via les hooks utilisateur ; une version récente de Copilot CLI est nécessaire.
 - **Copilot dans VS Code** : cliquer « VS Code », choisir le projet, puis utiliser le mode Agent. Refaire la connexion pour chaque projet.
 - **Copilot dans Visual Studio** : cliquer « Visual Studio », choisir la solution et activer `agentibou_state` dans les outils du chat. Demander à l’agent de signaler le début et la fin : le suivi reste indicatif.
 

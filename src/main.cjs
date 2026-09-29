@@ -152,9 +152,9 @@ ipcMain.handle('demo',(_,state)=>{if(!['idle','thinking','working','done','waiti
 ipcMain.handle('preferences',(_,values)=>{if(values.reducedMotion===null)settings.reducedMotion=null;for(const k of ['reducedMotion','silent','keepAssignedVisible'])if(typeof values[k]==='boolean')settings[k]=values[k];saveSettings();send();});
 ipcMain.handle('clear-session',(_,key)=>{if(typeof key==='string'){const e=store.sessions.get(key);if(e){e.state='idle';e.at=Date.now();}}send();});
 ipcMain.handle('install',async(_,kind)=>{
- try{if(!['claude','vscode','visualstudio'].includes(kind))throw new Error('Intégration inconnue');let project;
- if(kind!=='claude'){const result=await dialog.showOpenDialog(panel,{title:kind==='vscode'?'Choisir le projet VS Code':'Choisir la solution Visual Studio',properties:['openDirectory']});if(result.canceled)return {cancelled:true};project=result.filePaths[0];}
- return install(kind,{home:os.homedir(),claudeConfig:process.env.CLAUDE_CONFIG_DIR,root:ROOT,exe:process.execPath,bridge:path.join(__dirname,'..','scripts','bridge.cjs'),project});}catch(e){return {error:e.message};}
+ try{if(!['claude','vscode','copilot-cli','visualstudio'].includes(kind))throw new Error('Intégration inconnue');let project;
+ if(['vscode','visualstudio'].includes(kind)){const result=await dialog.showOpenDialog(panel,{title:kind==='vscode'?'Choisir le projet VS Code':'Choisir la solution Visual Studio',properties:['openDirectory']});if(result.canceled)return {cancelled:true};project=result.filePaths[0];}
+ return install(kind,{home:os.homedir(),claudeConfig:process.env.CLAUDE_CONFIG_DIR,copilotHome:process.env.COPILOT_HOME,root:ROOT,exe:process.execPath,bridge:path.join(__dirname,'..','scripts','bridge.cjs'),project});}catch(e){return {error:e.message};}
 });
 ipcMain.handle('open-folder',()=>shell.openPath(ROOT));
 

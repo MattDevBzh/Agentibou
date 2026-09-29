@@ -1,5 +1,5 @@
 'use strict';
-const providers = ['codex','claude','copilot','visualstudio'];
+const providers = ['codex','claude','copilot','copilot-cli','visualstudio'];
 const states = ['idle','thinking','working','done','waiting','error'];
 function projectKey(e){const path=require('node:path');return e.cwd?'path:'+((path.win32.isAbsolute(e.cwd)&&!e.cwd.startsWith('/'))?path.win32.normalize(e.cwd).toLowerCase():path.posix.normalize(e.cwd)):'name:'+e.project;}
 class SessionStore {

@@ -1,6 +1,6 @@
 'use strict';
 const character=document.querySelector('.sprite'),sprite=new VicSprite(character);
-const names={codex:'Codex',claude:'Claude Code',copilot:'Copilot · VS Code',visualstudio:'Visual Studio'};
+const names={codex:'Codex',claude:'Claude Code',copilot:'Copilot · VS Code','copilot-cli':'Copilot CLI',visualstudio:'Visual Studio'};
 const labels={thinking:'◌ Réflexion',working:'⌨ Code en cours',done:'✓ Terminée · ouvrir ↗',waiting:'◷ En attente',error:'! Erreur'};
 let current={state:'idle',settings:{},conversations:[],projects:[]},demo=null,demoTimer,feedbackTimer;
 const rows=new Map(),busy=new Set();
