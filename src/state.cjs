@@ -1,20 +1,24 @@
 'use strict';
 const providers = ['codex','claude','copilot','copilot-cli','visualstudio'];
 const states = ['idle','thinking','working','done','waiting','error'];
+function cleanModel(value){return typeof value==='string'&&value.trim()?value.replace(/[\x00-\x1f\x7f]/g,'').trim().slice(0,100):null;}
 function projectKey(e){const path=require('node:path');return e.cwd?'path:'+((path.win32.isAbsolute(e.cwd)&&!e.cwd.startsWith('/'))?path.win32.normalize(e.cwd).toLowerCase():path.posix.normalize(e.cwd)):'name:'+e.project;}
 class SessionStore {
-  constructor(dismissed=[]) { this.sessions=new Map();this.celebrations=new Map();this.completed=new Map();this.dismissed=new Map(dismissed.filter(e=>Array.isArray(e)&&typeof e[0]==='string'&&Number.isFinite(e[1]))); }
+  constructor(dismissed=[]) { this.models=new Map();this.sessions=new Map();this.celebrations=new Map();this.completed=new Map();this.dismissed=new Map(dismissed.filter(e=>Array.isArray(e)&&typeof e[0]==='string'&&Number.isFinite(e[1]))); }
   accept(e, now=Date.now()) {
     if(!e||!providers.includes(e.provider)||!states.includes(e.state)||typeof e.session!=='string'||!e.session||e.session.length>250||!Number.isFinite(e.at)||e.at>now+60000)return false;
     const key=e.provider+':'+e.session,old=this.sessions.get(key);if(old&&old.at>=e.at)return false;
-    const event={provider:e.provider,state:e.state,session:e.session,project:String(e.project||'Session').slice(0,100),at:e.at,startedAt:old?.startedAt||e.at,cwd:require('./navigation.cjs').safeDirectory(e.cwd)||old?.cwd};
+    if(cleanModel(e.model))this.setModel(e.provider,e.session,e.model,e.at);
+    const event={provider:e.provider,state:e.state,session:e.session,project:String(e.project||'Session').slice(0,100),at:e.at,startedAt:old?.startedAt||e.at,model:this.models.get(key)?.model||old?.model||null,modelAt:this.models.get(key)?.at||old?.modelAt||0,cwd:require('./navigation.cjs').safeDirectory(e.cwd)||old?.cwd};
     this.sessions.set(key,event);
     if(['thinking','working','waiting','error'].includes(e.state)){this.completed.delete(key);this.celebrations.delete(key);}
     if(e.state==='done'&&e.at>(this.dismissed.get(key)||0)){this.completed.set(key,event);if(now-e.at<7000)this.celebrations.set(key,event);}
     return true;
   }
+  setModel(provider,session,model,at){model=cleanModel(model);if(!model||!Number.isFinite(at)||at>Date.now()+60000)return;const key=provider+':'+session,previous=this.models.get(key);if(previous&&previous.at>at)return;this.models.set(key,{model,at});for(const map of [this.sessions,this.completed,this.celebrations]){const e=map.get(key);if(e&&at>=(e.modelAt||0)){e.model=model;e.modelAt=at;}}}
   acknowledge(key,at){const e=this.completed.get(key);if(!e||e.at!==at)return false;this.completed.delete(key);this.dismissed.set(key,at);return true;}
   snapshot(now=Date.now(),provider=null) {
+    for(const [key,value] of this.models)if(now-value.at>86400000)this.models.delete(key);
     for(const map of [this.completed,this.sessions])for(const [key,e] of map)if(now-e.at>86400000)map.delete(key);
     for(const [key,at] of this.dismissed)if(now-at>86400000)this.dismissed.delete(key);
     for(const [key,e] of this.celebrations)if(now-e.at>=7000)this.celebrations.delete(key);
@@ -36,7 +40,8 @@ function codexEvent(line, meta, now=Date.now()) {
   const p=e.payload||{};
   if(e.type==='session_meta') {meta.session=p.id||p.session_id;meta.cwd=require('./navigation.cjs').safeDirectory(p.cwd);meta.project=require('node:path').basename(p.cwd||'Codex');return null;}
   if(!meta.session)return null;
-  if(e.type==='response_item'&&['function_call','custom_tool_call','web_search_call'].includes(p.type)){const at=Date.parse(e.timestamp);if(!Number.isFinite(at))return null;meta.state='working';return {provider:'codex',session:meta.session,project:meta.project,cwd:meta.cwd,state:'working',at};}
+  if(e.type==='turn_context'){meta.model=cleanModel(p.model);meta.modelAt=Date.parse(e.timestamp);return null;}
+  if(e.type==='response_item'&&['function_call','custom_tool_call','web_search_call'].includes(p.type)){const at=Date.parse(e.timestamp);if(!Number.isFinite(at))return null;meta.state='working';return {provider:'codex',session:meta.session,project:meta.project,cwd:meta.cwd,model:meta.model,state:'working',at};}
   if(e.type!=='event_msg')return null;
   const map={task_started:'thinking',task_complete:'done',task_completed:'done',turn_aborted:'idle',task_aborted:'idle'};
   let state=map[p.type];
@@ -50,6 +55,6 @@ function codexEvent(line, meta, now=Date.now()) {
   if(!state&&progress&&!meta.state)meta.state='thinking';
   const at=Date.parse(e.timestamp);
   if(!Number.isFinite(at))return null;
-  return {provider:'codex',session:meta.session,project:meta.project,cwd:meta.cwd,state:state||meta.state||'thinking',at};
+  return {provider:'codex',session:meta.session,project:meta.project,cwd:meta.cwd,model:meta.model,state:state||meta.state||'thinking',at};
 }
-module.exports={SessionStore,codexEvent};
+module.exports={SessionStore,codexEvent,cleanModel};

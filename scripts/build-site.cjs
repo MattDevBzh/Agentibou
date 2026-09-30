@@ -26,6 +26,7 @@ async function getReleases(){
  fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(path.join(out,'assets'),{recursive:true});
  for(const file of ['vic.webp','toktokette.png','favicon.svg'])fs.copyFileSync(path.join(source,'assets',file),path.join(out,'assets',file));
  for(const file of ['style.css','app.js'])fs.copyFileSync(path.join(source,file),path.join(out,file));
+ fs.copyFileSync(path.join(root,'src/companion-prompt.js'),path.join(out,'companion-prompt.js'));
  const checksum=(win?.checksumUrl||mac?.checksumUrl)||(remote?base+'/releases':'downloads/SHA256SUMS.txt');
  const tokens={RELEASE_ROWS:releases.filter(r=>r!==win&&r!==mac).map(r=>`<tr><td>${esc(r.version)}</td><td>${r.platform==='win'?'Windows x64':'Mac Apple Silicon'}</td><td>${esc(r.size)}</td><td><a href="${esc(r.url)}" download>${r.format} ↓</a></td></tr>`).join('')||'<tr><td colspan="4">Les prochaines versions apparaîtront ici.</td></tr>',CHECKSUM_URL:checksum};
  for(const [key,r] of [['WIN',win],['MAC',mac]]){tokens[key+'_URL']=r?.url||base+'/releases';tokens[key+'_VERSION']=r?.version||'à venir';tokens[key+'_SIZE']=r?.size||'publication en préparation';tokens[key+'_FORMAT']=r?.format||'—';}

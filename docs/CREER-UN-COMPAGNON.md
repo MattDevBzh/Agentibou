@@ -1,8 +1,10 @@
-# Créer un compagnon pour Agentibou 0.4
+# Créer un compagnon pour Agentibou
 
 Le format ci-dessous correspond à Agentibou, qui réutilise l’atlas legacy de Vic. Il ne décrit pas le format des nouveaux pets Codex. Tu peux importer et nommer tes compagnons depuis l’app, sans recompiler.
 
 ## Prompt à copier
+
+Le bouton **Créer ma planche avec un LLM → Copier le prompt** est disponible dans la section Compagnons de l’app et du site. Le texte partagé par ces deux interfaces est conservé dans `src/companion-prompt.js`.
 
 Remplacer les passages entre crochets. Joindre éventuellement l’image du personnage et le spritesheet `src/assets/vic.webp`, en précisant que ce dernier sert seulement de référence de disposition.
 

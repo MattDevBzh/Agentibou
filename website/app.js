@@ -16,3 +16,6 @@ reduced.addEventListener('change',syncPause);
 setInterval(()=>{if(!paused&&!reduced.matches&&!document.hidden){frame++;paint();}},160);
 function revealAnchor(){const id=decodeURIComponent(location.hash.slice(1));const target=document.getElementById(id);if(target?.tagName==='DETAILS'){target.open=true;target.scrollIntoView({block:'start'});}}
 window.addEventListener('hashchange',revealAnchor);revealAnchor();update();syncPause();
+
+const promptField=document.querySelector('#companion-prompt');promptField.value=window.companionPrompt;
+document.querySelector('#copy-companion-prompt').onclick=async()=>{const status=document.querySelector('#prompt-copy-status');try{await navigator.clipboard.writeText(promptField.value);status.textContent='Prompt copié !';}catch{promptField.focus();promptField.select();status.textContent='Sélectionné : utilise Ctrl+C ou ⌘C pour le copier.';}};

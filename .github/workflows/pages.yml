@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['website/**', 'scripts/build-site.cjs', 'docs/INSTALLER-WINDOWS.txt', 'docs/CREER-UN-COMPAGNON.md', '.github/workflows/pages.yml']
+    paths: ['website/**', 'src/companion-prompt.js', 'scripts/build-site.cjs', 'docs/INSTALLER-WINDOWS.txt', 'docs/CREER-UN-COMPAGNON.md', '.github/workflows/pages.yml']
   release:
     types: [published]
 permissions:

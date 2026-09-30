@@ -1,0 +1,27 @@
+'use strict';
+const {_electron:electron}=require('playwright');
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+(async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'agentibou-feature-ui-')),qa=path.resolve('docs/qa');fs.mkdirSync(qa,{recursive:true});fs.mkdirSync(path.join(root,'events'));
+ const cli=path.join(root,'fake-cli.cjs');fs.writeFileSync(cli,`let b='';process.stdin.on('data',c=>{b+=c;let at=b.indexOf('\\r\\n\\r\\n');if(at<0)return;let r;try{r=JSON.parse(b.slice(at+4))}catch{return}b='';const data={jsonrpc:'2.0',id:r.id,result:r.method==='account.getQuota'?{quotaSnapshots:{premium_interactions:{hasQuota:true,entitlementRequests:100,remainingPercentage:63}}}:{protocolVersion:3}},s=JSON.stringify(data);process.stdout.write('Content-Length: '+Buffer.byteLength(s)+'\\r\\n\\r\\n'+s);});`);
+ const env={...process.env,AGENTIBOU_HOME:root,COPILOT_HOME:path.join(root,'copilot'),CODEX_HOME:path.join(root,'codex'),AGENTIBOU_CLAUDE_DESKTOP_HOME:path.join(root,'claude'),AGENTIBOU_COPILOT_CLI:cli};let app;const errors=[];
+ const launch=async()=>{app=await electron.launch({args:[path.resolve('.')],env});app.on('window',w=>w.on('pageerror',e=>errors.push(e.message)));};
+ const page=async provider=>{for(let i=0;i<100;i++){const p=app.windows().find(w=>!w.isClosed()&&(provider?w.url().endsWith('provider='+provider):w.url().endsWith('index.html')));if(p){await p.waitForFunction(()=>!!window.agentibou);return p;}await new Promise(r=>setTimeout(r,100));}throw Error('window missing '+provider);};
+ const now=new Date(),day=[now.getFullYear(),now.getMonth()+1,now.getDate()].join('-'),cfg={enabled:true,count:3,start:'00:00',end:'23:59'};
+ fs.writeFileSync(path.join(root,'preferences.json'),JSON.stringify({fun:cfg}));fs.writeFileSync(path.join(root,'fun-state.json'),JSON.stringify({day,signature:JSON.stringify(cfg),count:0,last:0,slots:[Date.now()-1000,Date.now()+3600000],bag:[0,1,2]}));
+ try{
+  await launch();let dashboard=await page(),idle=await page('idle');await idle.locator('#fun-bubble').waitFor();assert.match(await idle.locator('#fun-text').innerText(),/souris/);await idle.screenshot({path:path.join(qa,'fun-bubble.png')});
+  await dashboard.locator('#creation-prompt summary').click();await dashboard.locator('#copy-companion-prompt').click();assert.equal(await app.evaluate(({clipboard})=>clipboard.readText()),require('../src/companion-prompt.js'));await dashboard.locator('#creation-prompt').screenshot({path:path.join(qa,'companion-prompt.png')});
+  await dashboard.locator('#fun-count').fill('5');await dashboard.locator('#fun-start').fill('09:00');await dashboard.locator('#fun-end').fill('08:00');await dashboard.locator('#fun-form button').click();assert.match(await dashboard.locator('#fun-status').innerText(),/après/);
+  await dashboard.locator('#fun-end').fill('18:00');await dashboard.locator('#fun-form button').click();assert.match(await dashboard.locator('#fun-status').innerText(),/5 blagues/);assert.equal(JSON.parse(fs.readFileSync(path.join(root,'preferences.json'))).fun.count,5);await dashboard.locator('.fun-settings').screenshot({path:path.join(qa,'fun-settings.png')});
+  const logDir=path.join(root,'copilot','session-state','ui-session');fs.mkdirSync(logDir,{recursive:true});fs.writeFileSync(path.join(logDir,'events.jsonl'),JSON.stringify({type:'session.start',timestamp:new Date().toISOString(),data:{selectedModel:'claude-sonnet-test'}})+'\n');
+  fs.writeFileSync(path.join(root,'events','cli.json'),JSON.stringify({provider:'copilot-cli',session:'ui-session',project:'Mon projet',state:'working',at:Date.now()}));let pet=await page('copilot-cli');
+  await pet.waitForFunction(()=>document.querySelector('.conversation-model')?.textContent==='claude-sonnet-test',{},{timeout:20000});await pet.waitForFunction(()=>document.querySelector('.usage-metric')?.textContent==='Abonnement 37 %');assert.equal(await pet.locator('#fun-bubble').isVisible(),false);await pet.screenshot({path:path.join(qa,'model-and-quota.png')});
+  await app.evaluate(({Menu})=>{Menu.prototype.popup=function(){globalThis.__petMenu=this;};});await pet.locator('#pet-character').click({button:'right'});
+  assert.deepEqual(await app.evaluate(()=>globalThis.__petMenu.items.filter(i=>i.type==='checkbox').map(i=>i.label)),['Afficher les modèles','Afficher les sessions','Afficher les % d’utilisation']);
+  for(const index of [0,1,2])await app.evaluate((_,index)=>{const item=globalThis.__petMenu.items[index];item.click(item);},index);
+  await pet.waitForFunction(()=>document.querySelector('#conversations').hidden&&document.querySelector('#usage').hidden);const settings=JSON.parse(fs.readFileSync(path.join(root,'preferences.json')));assert.equal(settings.petAppearance['copilot-cli'].showModels,false);assert.equal((await pet.evaluate(()=>window.agentibou.getState())).sessions.length,1);
+  await app.close();await launch();dashboard=await page();pet=await page('copilot-cli');await pet.waitForFunction(()=>document.querySelector('#conversations').hidden&&document.querySelector('#usage').hidden);assert.equal(await dashboard.locator('#fun-count').inputValue(),'5');assert.deepEqual(errors,[]);
+  console.log('Feature UI OK: prompt clipboard, fun bubble/settings, model, account quota, right-click menu, independent visibility and restart persistence.');
+ }finally{if(app)await app.close();fs.rmSync(root,{recursive:true,force:true});}
+})().catch(e=>{console.error(e);process.exitCode=1;});

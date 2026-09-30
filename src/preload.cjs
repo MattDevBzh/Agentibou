@@ -1,5 +1,6 @@
 const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('agentibou',{
+ petMenu:()=>ipcRenderer.invoke('pet-menu'),dismissJoke:()=>ipcRenderer.invoke('dismiss-joke'),copyCompanionPrompt:()=>ipcRenderer.invoke('copy-companion-prompt'),
  getUpdateState:()=>ipcRenderer.invoke('get-update-state'),checkUpdates:()=>ipcRenderer.invoke('check-updates'),installUpdate:()=>ipcRenderer.invoke('install-update'),onUpdateState:fn=>ipcRenderer.on('update-state',(_,state)=>fn(state)),
  petRendered:()=>ipcRenderer.send('pet-rendered'),petRenderError:()=>ipcRenderer.send('pet-render-error'),openDiagnostics:()=>ipcRenderer.invoke('open-diagnostics'),
  restorePets:()=>ipcRenderer.invoke('restore-pets'),

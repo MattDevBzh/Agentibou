@@ -6,11 +6,12 @@ function petPreference(settings,provider){
 }
 // Logical CSS dimensions plus physical window dimensions. Keep the character
 // anchored while lists grow and reserve scrollable room on small screens.
-function petLayout(conversations,usageRows,availableHeight=900,requestedScale=1,availableWidth=Infinity){
+function petDisplay(settings,provider){const p=settings.petAppearance?.[provider];return {showModels:p?.showModels!==false,showSessions:p?.showSessions!==false,showUsage:p?.showUsage!==false};}
+function petLayout(conversations,usageRows,availableHeight=900,requestedScale=1,availableWidth=Infinity,showModels=false,fun=false){
  const scale=Math.min(Math.max(.6,Math.min(1.5,requestedScale)),availableWidth/300,availableHeight/240);
  const extra=Math.max(0,Math.floor(availableHeight/scale)-240);
- const topHeight=Math.min(conversations*58,232,Math.floor(extra*.75));
+ const topHeight=Math.min(conversations*(showModels?74:58)+(fun?120:0),fun?352:showModels?296:232,Math.floor(extra*.75));
  const bottomHeight=usageRows?Math.min(48,extra-topHeight):0;
  return {width:Math.ceil(300*scale),height:Math.ceil((240+topHeight+bottomHeight)*scale),topHeight,bottomHeight,scale};
 }
-module.exports={petLayout,petPreference,PET_PROVIDERS};
+module.exports={petLayout,petPreference,petDisplay,PET_PROVIDERS};

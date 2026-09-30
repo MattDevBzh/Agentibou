@@ -1,14 +1,20 @@
 'use strict';
-const {app,BrowserWindow,ipcMain,screen,Tray,Menu,nativeImage,dialog,shell,net,powerMonitor}=require('electron');
+const {app,BrowserWindow,ipcMain,screen,Tray,Menu,nativeImage,dialog,shell,net,powerMonitor,clipboard}=require('electron');
 const fs=require('node:fs');const os=require('node:os');const path=require('node:path');
 const {visibleProviders,CompanionLibrary,cleanSelection,selectedCompanion,cleanName,imageType,PROVIDERS}=require('./companions.cjs');
 const {destination}=require('./navigation.cjs');
 const {findDesktopSession}=require('./claude-desktop.cjs');
 const claudeDesktopRoot=process.env.AGENTIBOU_CLAUDE_DESKTOP_HOME||process.env.AVATAI_CLAUDE_DESKTOP_HOME||path.join(app.getPath('appData'),'Claude');
 const {UsageStore}=require('./usage.cjs');
-const {petLayout,petPreference,PET_PROVIDERS}=require('./pet-layout.cjs');
+const {CopilotQuota}=require('./copilot-quota.cjs');
+const {FunScheduler,funSettings,validFun}=require('./fun.cjs');
+const copilotQuota=new CopilotQuota();
+let demoUntil=0;
+const {petLayout,petPreference,petDisplay,PET_PROVIDERS}=require('./pet-layout.cjs');
 const {SessionStore}=require('./state.cjs');const {Watcher}=require('./watcher.cjs');const {install}=require('./integrations.cjs');
 const ROOT=require('../scripts/bridge.cjs').dataRoot();
+fs.mkdirSync(ROOT,{recursive:true});
+const fun=new FunScheduler(path.join(ROOT,'fun-state.json'));
 const {createDiagnostics}=require('./diagnostics.cjs');
 const diagnostics=createDiagnostics(ROOT);
 app.setName('Agentibou');
@@ -45,6 +51,7 @@ function tick(){
  if(gap>RENDER_TIMEOUT)for(const p of pets.values()){p.lastRender=now;p.createdAt=now;}
  for(const p of [...pets.values()])if(now-(p.ready?p.lastRender:p.createdAt)>RENDER_TIMEOUT)retirePet(p,p.ready?'renderer-timeout':'startup-timeout');
  try{watcher.poll();}catch(error){diagnostics.log('watcher-error',{code:error.code||error.name});}
+ if(store.snapshot().sessions.some(e=>e.provider==='copilot-cli')||settings.companions?.assignments?.['copilot-cli'])copilotQuota.poll();
  safeSend();
 }
 const settingsFile=path.join(ROOT,'preferences.json');
@@ -53,11 +60,11 @@ if(Array.isArray(settings.dismissedConversations))store.dismissed=new SessionSto
 
 function saveSettings(){fs.mkdirSync(ROOT,{recursive:true});fs.writeFileSync(settingsFile,JSON.stringify(settings,null,2));}
 function secureWindow(options,{backgroundThrottling=true}={}){const w=new BrowserWindow({...options,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,backgroundThrottling}});w.webContents.setWindowOpenHandler(()=>({action:'deny'}));w.webContents.on('will-navigate',e=>e.preventDefault());return w;}
-function snapshot(provider=null){const state=store.snapshot(Date.now(),provider);const companions=library.list(),selection=cleanSelection(settings.companions,companions);const companionProvider=PROVIDERS.includes(provider)?provider:state.focus?.provider||null;return {...state,provider,usage:usage.snapshot(companionProvider,state.focus?.session),conversations:state.conversations.map(e=>({...e,destination:e.state==='done'?destination(e):null})),companions,companionSelection:selection,companionProvider,companion:selectedCompanion(selection,companions,companionProvider),completion:state.completion?{...state.completion,destination:destination(state.completion)}:null,diagnostics:watcher.status,settings,petsVisible,petControls:PET_PROVIDERS.map(provider=>({provider,...petPreference(settings,provider),present:visibleProviders(state.conversations,selection,settings.keepAssignedVisible!==false).includes(provider)})),platform:process.platform,home:ROOT};}
+function snapshot(provider=null){const state=store.snapshot(Date.now(),provider);const companions=library.list(),selection=cleanSelection(settings.companions,companions);const companionProvider=PROVIDERS.includes(provider)?provider:state.focus?.provider||null;return {...state,provider,display:petDisplay(settings,provider),fun:fun.forProvider(provider),funSettings:funSettings(settings.fun),copilotQuotaStatus:copilotQuota.status,usage:companionProvider==='copilot-cli'?copilotQuota.snapshot():usage.snapshot(companionProvider,state.focus?.session),conversations:state.conversations.map(e=>({...e,destination:e.state==='done'?destination(e):null})),companions,companionSelection:selection,companionProvider,companion:selectedCompanion(selection,companions,companionProvider),completion:state.completion?{...state.completion,destination:destination(state.completion)}:null,diagnostics:watcher.status,settings,petsVisible,petControls:PET_PROVIDERS.map(provider=>({provider,...petPreference(settings,provider),...petDisplay(settings,provider),present:visibleProviders(state.conversations,selection,settings.keepAssignedVisible!==false).includes(provider)})),platform:process.platform,home:ROOT};}
 function petFor(sender){return [...pets.values()].find(p=>!p.window.isDestroyed()&&p.window.webContents===sender);}
 function petSnapshot(p){const s=snapshot(p.provider);resizePet(p,s);s.petPosition=p.window.getPosition();return s;}
 function syncPets(s){const wanted=visibleProviders(s.conversations,s.companionSelection,settings.keepAssignedVisible!==false);for(const [key,p] of pets)if(!wanted.includes(key))retirePet(p,'no-longer-needed');for(const provider of wanted)if(!pets.has(provider)&&!quitting)createPet(provider);}
-function send(){const s=snapshot();syncPets(s);if(panel&&!panel.isDestroyed())panel.webContents.send('state',s);for(const p of pets.values())if(!p.window.isDestroyed()){const state=petSnapshot(p);p.window.setTitle((state.companion?.name||'Compagnon')+' · '+(PROVIDERS.includes(p.provider)?p.provider:'Agentibou'));p.window.webContents.send('state',state);applyPetVisibility(p);}}
+function send(){const s=snapshot();syncPets(s);const eligible=Date.now()<demoUntil||!petsVisible?[]:[...pets.values()].filter(p=>p.ready&&!petPreference(settings,p.provider).hidden&&(()=>{const state=store.snapshot(Date.now(),p.provider);return state.state==='idle'&&!state.conversations.some(e=>e.state!=='done');})()).map(p=>p.provider);try{fun.tick(settings.fun,eligible);}catch(error){fun.dismiss();diagnostics.log('fun-state-error',{code:error.code||error.name});}if(panel&&!panel.isDestroyed())panel.webContents.send('state',s);for(const p of pets.values())if(!p.window.isDestroyed()){const state=petSnapshot(p);p.window.setTitle((state.companion?.name||'Compagnon')+' · '+(PROVIDERS.includes(p.provider)?p.provider:'Agentibou'));p.window.webContents.send('state',state);applyPetVisibility(p);}}
 function applyPetVisibility(p){
  const w=p.window;if(w.isDestroyed()||!p.ready)return;
  const visible=petsVisible&&!petPreference(settings,p.provider).hidden;
@@ -67,11 +74,11 @@ function applyPetVisibility(p){
   if(!w.isVisible()){logPet(p,'pet-show');w.showInactive();}
  }else if(w.isVisible()){logPet(p,'pet-hide',{reason:'user-preference'});w.hide();}
 }
-function resizePet(p,s){const pet=p.window;if(pet.isDestroyed())return;const bounds=pet.getBounds(),area=screen.getDisplayMatching(bounds).workArea;const layout=petLayout(s.conversations.length,s.usage.length?1:0,area.height,petPreference(settings,p.provider).scale,area.width);const x=Math.max(area.x,Math.min(bounds.x,area.x+area.width-layout.width)),y=Math.max(area.y,Math.min(bounds.y+p.top-Math.round(layout.topHeight*layout.scale),area.y+area.height-layout.height));p.top=Math.round(layout.topHeight*layout.scale);if(bounds.width!==layout.width||bounds.height!==layout.height||bounds.x!==x||bounds.y!==y)pet.setBounds({x,y,width:layout.width,height:layout.height});s.petLayout=layout;}
+function resizePet(p,s){const pet=p.window;if(pet.isDestroyed())return;const bounds=pet.getBounds(),area=screen.getDisplayMatching(bounds).workArea;const layout=petLayout(s.display.showSessions?s.conversations.length:0,s.display.showUsage&&(s.usage.length||p.provider==='copilot-cli')?1:0,area.height,petPreference(settings,p.provider).scale,area.width,s.display.showModels,!!s.fun);const x=Math.max(area.x,Math.min(bounds.x,area.x+area.width-layout.width)),y=Math.max(area.y,Math.min(bounds.y+p.top-Math.round(layout.topHeight*layout.scale),area.y+area.height-layout.height));p.top=Math.round(layout.topHeight*layout.scale);if(bounds.width!==layout.width||bounds.height!==layout.height||bounds.x!==x||bounds.y!==y)pet.setBounds({x,y,width:layout.width,height:layout.height});s.petLayout=layout;}
 function togglePets(){petsVisible=!petsVisible;diagnostics.log('visibility-toggle',{visible:petsVisible});for(const p of pets.values())applyPetVisibility(p);send();return petsVisible;}
 function restorePets(){
  petsVisible=true;settings.petAppearance||={};
- for(const provider of PET_PROVIDERS)settings.petAppearance[provider]={...petPreference(settings,provider),hidden:false};
+ for(const provider of PET_PROVIDERS)settings.petAppearance[provider]={...settings.petAppearance[provider],...petPreference(settings,provider),hidden:false};
  saveSettings();rebuildPets('manual-restore');return {restored:true};
 }
 function acknowledge(key,at){const removed=store.acknowledge(key,at);if(removed){settings.dismissedConversations=[...store.dismissed];saveSettings();}return removed;}
@@ -127,7 +134,7 @@ if(!app.requestSingleInstanceLock())app.quit();else{
  });
 }
 app.on('child-process-gone',(_,details)=>{diagnostics.log('child-process-gone',{type:details.type,reason:details.reason,exitCode:details.exitCode});if(details.type==='GPU'&&!quitting&&app.isReady())rebuildPets('gpu-process-gone');});
-app.on('before-quit',()=>{diagnostics.log('app-quit');quitting=true;updates.stop();clearInterval(timer);});app.on('activate',showPanel);app.on('window-all-closed',()=>{});
+app.on('before-quit',()=>{diagnostics.log('app-quit');quitting=true;updates.stop();copilotQuota.stop();clearInterval(timer);});app.on('activate',showPanel);app.on('window-all-closed',()=>{});
 ipcMain.on('pet-rendered',event=>{const p=petFor(event.sender);if(p)p.lastRender=Date.now();});
 ipcMain.on('pet-render-error',event=>{const p=petFor(event.sender);if(p)logPet(p,'renderer-error');});
 ipcMain.handle('open-diagnostics',event=>event.sender===panel?.webContents?shell.openPath(diagnostics.directory):null);
@@ -143,13 +150,13 @@ ipcMain.handle('pet-appearance',(event,provider,value)=>{
  const senderPet=petFor(event.sender);
  if(!PET_PROVIDERS.includes(provider)||(senderPet&&senderPet.provider!==provider)||(!senderPet&&event.sender!==panel?.webContents))return {error:'Compagnon indisponible.'};
  if(!value||typeof value!=='object'||(value.scale!==undefined&&(!Number.isFinite(value.scale)||value.scale<.6||value.scale>1.5))||(value.hidden!==undefined&&typeof value.hidden!=='boolean'))return {error:'Réglage invalide.'};
- settings.petAppearance||={};settings.petAppearance[provider]={...petPreference(settings,provider),...(value.scale!==undefined?{scale:Math.round(value.scale*100)/100}:{}),...(value.hidden!==undefined?{hidden:value.hidden}:{})};
+ settings.petAppearance||={};settings.petAppearance[provider]={...petDisplay(settings,provider),...petPreference(settings,provider),...(value.scale!==undefined?{scale:Math.round(value.scale*100)/100}:{}),...(value.hidden!==undefined?{hidden:value.hidden}:{}),...Object.fromEntries(['showModels','showSessions','showUsage'].filter(k=>typeof value[k]==='boolean').map(k=>[k,value[k]]))};
  diagnostics.log('pet-preference',{provider,...(value.hidden!==undefined?{hidden:value.hidden}:{}),...(value.scale!==undefined?{scale:value.scale}:{})});
  if(value.hidden===false)petsVisible=true;
  saveSettings();send();return {saved:true};
 });
-ipcMain.handle('demo',(_,state)=>{if(!['idle','thinking','working','done','waiting','error',null].includes(state))return;for(const w of [panel,...[...pets.values()].map(p=>p.window)])if(w&&!w.isDestroyed())w.webContents.send('demo',state);});
-ipcMain.handle('preferences',(_,values)=>{if(values.reducedMotion===null)settings.reducedMotion=null;for(const k of ['reducedMotion','silent','keepAssignedVisible'])if(typeof values[k]==='boolean')settings[k]=values[k];saveSettings();send();});
+ipcMain.handle('demo',(_,state)=>{if(!['idle','thinking','working','done','waiting','error',null].includes(state))return;demoUntil=state?Date.now()+12000:0;for(const w of [panel,...[...pets.values()].map(p=>p.window)])if(w&&!w.isDestroyed())w.webContents.send('demo',state);});
+ipcMain.handle('preferences',(_,values)=>{if(values.fun!==undefined){if(!validFun(values.fun))return {error:'Choisis de 1 à 24 blagues et une heure de fin après le début.'};settings.fun=funSettings(values.fun);}if(values.reducedMotion===null)settings.reducedMotion=null;for(const k of ['reducedMotion','silent','keepAssignedVisible'])if(typeof values[k]==='boolean')settings[k]=values[k];saveSettings();send();return {saved:true};});
 ipcMain.handle('clear-session',(_,key)=>{if(typeof key==='string'){const e=store.sessions.get(key);if(e){e.state='idle';e.at=Date.now();}}send();});
 ipcMain.handle('install',async(_,kind)=>{
  try{if(!['claude','vscode','copilot-cli','visualstudio'].includes(kind))throw new Error('Intégration inconnue');let project;
@@ -195,3 +202,12 @@ ipcMain.handle('import-companion',async(_,name)=>{
   const companion=library.add(name,bytes,type);send();return {companion};
  }catch(e){return {error:e.message.includes('EncodingError')?'L’image est illisible. Vérifie le fichier.':e.message};}finally{if(validator&&!validator.isDestroyed())validator.destroy();}
 });
+
+ipcMain.handle('pet-menu',event=>{
+ const p=petFor(event.sender);if(!p)return;
+ const display=petDisplay(settings,p.provider);
+ const template=[['showModels','Afficher les modèles'],['showSessions','Afficher les sessions'],['showUsage','Afficher les % d’utilisation']].map(([key,label])=>({label,type:'checkbox',checked:display[key],click:item=>{settings.petAppearance||={};settings.petAppearance[p.provider]={...settings.petAppearance[p.provider],[key]:item.checked};saveSettings();send();}}));
+ Menu.buildFromTemplate([...template,{type:'separator'},{label:'Réglages du mode fun…',click:showPanel}]).popup({window:p.window});
+});
+ipcMain.handle('dismiss-joke',event=>{if(petFor(event.sender)){fun.dismiss();send();}});
+ipcMain.handle('copy-companion-prompt',event=>{if(event.sender!==panel?.webContents)return;clipboard.writeText(require('./companion-prompt.js'));return {copied:true};});

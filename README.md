@@ -81,3 +81,15 @@ Le site Atelier est généré dans `output/site/`. Pour générer la version pub
 ## Illustrations
 
 Vic et Toktokette sont les illustrations personnalisées incluses dans Agentibou. Leurs planches utilisent une grille 8 × 9 de 1536 × 1872 pixels. Elles ne sont pas au format Codex v2 à 11 lignes. La publication du dépôt ne constitue pas une licence générale de réutilisation de ces illustrations.
+
+## Affichage, création et pauses (0.8.0)
+
+- **Clic droit sur un avatar** : afficher ou cacher séparément les modèles, les bulles de session et la consommation. Les choix sont conservés par outil au redémarrage ; le suivi continue même si ses bulles sont masquées.
+- **Modèle de session** : lu dans les contextes Codex, les événements locaux Copilot CLI ou les métadonnées des hooks. Pour Claude, le bridge peut aussi extraire uniquement le nom du modèle des 128 derniers Kio du transcript indiqué par le hook. Aucun contenu de conversation n’est conservé par Agentibou. Si l’outil ne communique pas le modèle (notamment certains hooks d’IDE), la bulle le signale.
+- **Quota Copilot CLI** : consultation du compte connecté toutes les cinq minutes, via `account.getQuota` du CLI installé. Aucun prompt, aucune session créée, aucun appel de modèle. Le pourcentage est la part **utilisée du quota du compte**, tous outils confondus. Le programme affiche « illimité » ou « indisponible » lorsque nécessaire. Il ne déduit pas un abonnement à partir des tokens. Le CLI doit être installé et connecté ; `COPILOT_HOME` est respecté. Pour une installation hors PATH, `AGENTIBOU_COPILOT_CLI` accepte le chemin absolu du binaire ou de son entrée JS. Les données expirent après dix minutes et disparaissent en cas d’erreur de lecture.
+- **Créer une planche** : ouvrir « Créer ma planche avec un LLM » dans les Compagnons ou sur le site, puis **Copier le prompt**. Le même texte vient de `src/companion-prompt.js`. Il utilise le format Agentibou 8 × 9, et rappelle de vérifier le résultat du générateur.
+- **Mode fun** : désactivé par défaut. Choisir 1 à 24 blagues par jour et une plage horaire locale dans la même journée, puis Enregistrer. Une réserve de 200 blagues familiales est mélangée sans répétition avant épuisement. Une seule bulle à la fois, sur un compagnon visible au repos, pendant 20 secondes (fermeture avec ×). Les horaires sont aléatoires, avec au moins cinq minutes entre deux apparitions. Le compteur et le tirage persistent dans `fun-state.json`. Les moments échus attendent le repos, sans rafale après une veille ni rattrapage après la plage choisie ; une plage trop courte ou une disponibilité insuffisante peut réduire le nombre effectif.
+
+Validation locale : `npm test`, `npm run test:ui`, `npm run test:features`, puis `npm run site:build` et `npm run site:test` avec le serveur local démarré. Les scénarios Electron utilisent des données temporaires ; le quota du scénario graphique est simulé. Ils ne remplacent pas une recette sur un PC Windows.
+
+Référence du quota : [API de consommation GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-sdk/features/usage-and-billing#account-quota-and-premium-interactions).

@@ -14,11 +14,17 @@ function dataRoot(env = process.env, home = os.homedir()) {
 }
 const ROOT = dataRoot();
 const STATES = new Set(['idle', 'thinking', 'working', 'done', 'waiting', 'error']);
+function transcriptModel(file){
+  if(typeof file!=='string'||!path.isAbsolute(file)||!file.endsWith('.jsonl'))return null;
+  let fd;try{fd=fs.openSync(file,'r');const size=fs.fstatSync(fd).size,start=Math.max(0,size-128*1024),buffer=Buffer.alloc(size-start);fs.readSync(fd,buffer,0,buffer.length,start);const lines=buffer.toString('utf8').split('\n');if(start)lines.shift();for(const line of lines.reverse()){try{const e=JSON.parse(line);if(e.type==='assistant'&&typeof e.message?.model==='string')return e.message.model;}catch{}}}catch{}finally{if(fd!==undefined)fs.closeSync(fd);}return null;
+}
 function normalize(provider, state, input = {}) {
   if (!['claude', 'codex', 'copilot', 'copilot-cli', 'visualstudio'].includes(provider) || !STATES.has(state)) throw new Error('Invalid event');
   const cwd = typeof input.cwd === 'string' ? input.cwd : process.cwd();
   const session = input.session_id || input.sessionId || input['thread-id'] || input.session || cwd;
-  return { provider, state, session: String(session).slice(0, 250), project: path.basename(cwd).slice(0, 100), cwd, at: Date.now() };
+  const rawModel=input.model||(provider==='claude'?transcriptModel(input.transcript_path):null);
+  const model=typeof rawModel==='string'?rawModel.replace(/[\x00-\x1f\x7f]/g,'').trim().slice(0,100):null;
+  return { ...(model?{model}:{}), provider, state, session: String(session).slice(0, 250), project: path.basename(cwd).slice(0, 100), cwd, at: Date.now() };
 }
 function emit(event) {
   const dir = path.join(ROOT, 'events');
