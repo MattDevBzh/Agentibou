@@ -23,7 +23,7 @@ Les secrets ne doivent jamais être commités ni écrits dans un ticket.
 
 Sans certificat, Windows produit une bêta non signée. L’updater conserve les vérifications intégrées d’electron-updater ; aucun contournement de signature n’est ajouté. La signature de l’installateur doit être configurée avant de présenter la distribution comme signée.
 
-Mac active la signature, la notarisation et les mises à jour natives uniquement quand les cinq secrets sont présents. Sinon, la compilation reste explicitement non signée et l’application se limite à signaler une nouvelle version avec un lien de téléchargement. Ne pas forcer `agentibouUpdates.macSigned` à `true` pour une application non signée.
+Mac active la signature, la notarisation et les mises à jour natives uniquement quand les cinq secrets sont présents. Sinon, la compilation applique une signature locale ad hoc (`mac.identity=-`) pour sceller correctement le bundle Electron après son renommage ; cela ne remplace ni un certificat Developer ID ni la notarisation Apple. L’application se limite à signaler une nouvelle version avec un lien de téléchargement. Ne pas forcer `agentibouUpdates.macSigned` à `true` pour une application non signée.
 
 ## Comportement de l’application
 
@@ -51,3 +51,13 @@ Les fenêtres sont également reconstruites après reprise de veille, déverroui
 Le bouton **Journaux de diagnostic** ouvre le dossier `logs` des données locales (par défaut `%USERPROFILE%\.agentibou\logs` sous Windows, ou `.avatai\logs` pour une installation conservant les anciennes données). En cas de récidive, relever l’heure et partager les fichiers `companions.jsonl`, `companions.jsonl.1` et `companions.jsonl.2` présents dans ce dossier. Ils contiennent les événements des fenêtres, les raisons des crashs/récupérations, les dimensions/positions et la version de l’application/système, sans texte des conversations, nom de projet ou chemin de fichier. Rien n’est envoyé automatiquement. Chaque fichier est limité à 512 Kio ; les deux archives les plus récentes sont conservées. Un échec d’écriture du journal n’arrête pas la récupération.
 
 `test:recovery` vérifie fermeture, crash, blocage réel du moteur de rendu, masquage/minimisation, restauration manuelle, préférences et redémarrage. Les événements de veille/GPU sont simulés : ce test ne reproduit pas une panne matérielle de pilote graphique ni le comportement de chaque PC.
+
+## Contrôle des paquets Mac depuis 0.8.1
+
+`npm run dist:mac` utilise `scripts/build-mac-release.cjs`. Après fabrication, `scripts/verify-mac-release.cjs` extrait le ZIP et monte le DMG en lecture seule, puis impose `codesign --verify --deep --strict` sur les deux applications. Il vérifie la version, l’identifiant du bundle et l’identité du contenu `app.asar`, puis lance l’application empaquetée avec des données isolées. Une publication échoue avant envoi des fichiers si un de ces contrôles échoue. Pour une distribution Apple signée/notariée, les contrôles `spctl` et `stapler validate` doivent aussi réussir.
+
+Les documents sont distribués via `extraResources`, dans `Contents/Resources` sur Mac et `resources` sur Windows. Les fichiers libres directement dans `Contents` sont interdits par les contrôles de signature.
+
+La 0.8.0 avait conservé une signature Electron incomplète après emballage : les empreintes des téléchargements étaient correctes mais `codesign` échouait avec « code has no resources but signature indicates they must be present ». L’ouverture directe hors quarantaine ne détectait pas ce défaut. La 0.8.1 corrige le scellement du bundle ; **elle ne garantit pas l’acceptation automatique par Gatekeeper sans Developer ID et notarisation**.
+
+Installation de la bêta non notariée : copier l’app dans Applications, essayer de l’ouvrir, puis utiliser **Réglages Système → Confidentialité et sécurité → Ouvrir quand même** si macOS demande une autorisation. Ne pas présenter une signature ad hoc comme une validation Apple. Ne pas conseiller de désactiver globalement Gatekeeper. Si « endommagé » persiste avec une version corrigée, vérifier le fichier précis avant toute exception.

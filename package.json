@@ -1,6 +1,6 @@
 {
   "name": "agentibou",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Un compagnon de bureau pour vos agents de développement",
   "main": "src/main.cjs",
@@ -9,7 +9,7 @@
     "test": "node --test test/*.test.cjs",
     "pack": "electron-builder --dir",
     "dist:win": "electron-builder --win nsis --x64 --publish never",
-    "dist:mac": "electron-builder --mac dmg zip --arm64 --publish never",
+    "dist:mac": "node scripts/build-mac-release.cjs",
     "test:ui": "node scripts/test-ui.cjs",
     "test:features": "node scripts/test-features-ui.cjs",
     "test:recovery": "node scripts/test-recovery.cjs",
@@ -48,7 +48,19 @@
       "output": "dist"
     },
     "artifactName": "Agentibou-${version}-${os}-${arch}.${ext}",
-    "extraFiles": [
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Agentibou"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "MattDevBzh",
+      "repo": "Agentibou",
+      "releaseType": "release"
+    },
+    "extraResources": [
       {
         "from": "README.md",
         "to": "LIRE-MOI.md"
@@ -65,19 +77,7 @@
         "from": "docs/INSTALLER-WINDOWS.txt",
         "to": "INSTALLER-WINDOWS.txt"
       }
-    ],
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "deleteAppDataOnUninstall": false,
-      "shortcutName": "Agentibou"
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "MattDevBzh",
-      "repo": "Agentibou",
-      "releaseType": "release"
-    }
+    ]
   },
   "author": "Matt",
   "dependencies": {
