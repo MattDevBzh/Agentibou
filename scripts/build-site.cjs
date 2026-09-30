@@ -25,6 +25,7 @@ async function getReleases(){
  // output/site is generated only; source assets and release archives live elsewhere.
  fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(path.join(out,'assets'),{recursive:true});
  for(const file of ['vic.webp','toktokette.png','favicon.svg'])fs.copyFileSync(path.join(source,'assets',file),path.join(out,'assets',file));
+ for(const file of ['basil.png','tempo.png','mochi.png'])fs.copyFileSync(path.join(root,'src/assets',file),path.join(out,'assets',file));
  for(const file of ['style.css','app.js'])fs.copyFileSync(path.join(source,file),path.join(out,file));
  fs.copyFileSync(path.join(root,'src/companion-prompt.js'),path.join(out,'companion-prompt.js'));
  const checksum=(win?.checksumUrl||mac?.checksumUrl)||(remote?base+'/releases':'downloads/SHA256SUMS.txt');

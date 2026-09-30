@@ -2,7 +2,7 @@
 
 **Du code. Et un peu de compagnie.**
 
-Agentibou est une application de bureau qui donne vie à tes sessions Codex, Claude Code et GitHub Copilot. Vic et Toktokette réfléchissent, travaillent et célèbrent la fin des réponses, dans de petites fenêtres flottantes.
+Agentibou est une application de bureau qui donne vie à tes sessions Codex, Claude Code et GitHub Copilot. Vic, Paprika, Basil, Tempo et Mochi réfléchissent, travaillent et célèbrent la fin des réponses, dans de petites fenêtres flottantes.
 
 [Découvrir le site](https://mattdevbzh.github.io/Agentibou/) · [Télécharger](https://github.com/MattDevBzh/Agentibou/releases/latest) · [Signaler un problème](https://github.com/MattDevBzh/Agentibou/issues)
 
@@ -80,7 +80,7 @@ Le site Atelier est généré dans `output/site/`. Pour générer la version pub
 
 ## Illustrations
 
-Vic et Toktokette sont les illustrations personnalisées incluses dans Agentibou. Leurs planches utilisent une grille 8 × 9 de 1536 × 1872 pixels. Elles ne sont pas au format Codex v2 à 11 lignes. La publication du dépôt ne constitue pas une licence générale de réutilisation de ces illustrations.
+Vic, Paprika, Basil, Tempo et Mochi sont les illustrations personnalisées incluses dans Agentibou. Ils peuvent être renommés dans **Compagnons → Renommer** ; ces noms restent locaux et sont conservés au redémarrage. Leurs planches utilisent une grille 8 × 9 de 1536 × 1872 pixels. Elles ne sont pas au format Codex v2 à 11 lignes. La publication du dépôt ne constitue pas une licence générale de réutilisation de ces illustrations.
 
 ## Affichage, création et pauses (0.8.0)
 

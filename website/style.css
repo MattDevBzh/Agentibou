@@ -6,3 +6,5 @@
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}.button:hover,.companion-card:hover{transform:none}}
 
 .prompt-panel{margin:20px 0;padding:18px;border:1px solid #cfd9bf;border-radius:16px;background:#f3f6eb}.prompt-panel summary{cursor:pointer;font-weight:650}.prompt-panel p{font-size:13px;line-height:1.6;color:#58644e}.prompt-panel textarea{display:block;width:100%;resize:vertical;margin:14px 0;padding:12px;border:1px solid #c4ceb5;border-radius:10px;background:#fffef9;color:#34452f;font:12px/1.6 ui-monospace,monospace}.prompt-panel button{cursor:pointer;border:1px solid #b9c9a3;border-radius:10px;padding:10px 14px;background:#e6efd9;color:#34452f;font:inherit}.prompt-panel [role=status]{display:inline-block;margin:8px;font-size:12px}
+
+.sprite.basil{background-image:url('assets/basil.png')}.sprite.tempo{background-image:url('assets/tempo.png')}.sprite.mochi{background-image:url('assets/mochi.png')}

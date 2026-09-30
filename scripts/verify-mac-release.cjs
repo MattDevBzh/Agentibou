@@ -32,6 +32,10 @@ const run=(file,args)=>execFileSync(file,args,{encoding:'utf8',stdio:['ignore','
   assert.deepEqual(await app.evaluate(({app})=>({version:app.getVersion(),packaged:app.isPackaged})),{version,packaged:true});
   let panel;for(let i=0;i<100;i++){panel=app.windows().find(w=>w.url().endsWith('index.html'));if(panel)break;await new Promise(r=>setTimeout(r,100));}assert.ok(panel,'Packaged dashboard missing');
   await panel.waitForFunction(()=>!!window.agentibou);assert.equal((await panel.evaluate(()=>window.agentibou.getState())).funSettings.enabled,false);
+  const catalog=(await panel.evaluate(()=>window.agentibou.getState())).companions;
+  assert.deepEqual(catalog.map(p=>p.name),require('../src/companions.cjs').BUILTINS.map(p=>p.name));
+  for(const companion of catalog)await panel.evaluate(async p=>{const img=new Image();img.src=p.imageUrl;await img.decode();if(img.naturalWidth!==1536||img.naturalHeight!==1872)throw Error('Invalid bundled sheet: '+p.name);},companion);
+  report.bundledCompanions=catalog.map(p=>p.name);
   report.launchVerified=true;report.gatekeeperApproval=report.notarized?'Apple notarized':'User approval still required: no Developer ID or Apple notarization';
   fs.writeFileSync(path.join(dir,'mac-verification.json'),JSON.stringify(report,null,2)+'\n');
   console.log(`Mac ${version}: strict signatures valid in DMG + ZIP; packaged launch verified; Apple notarization: ${report.notarized}.`);

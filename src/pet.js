@@ -5,7 +5,7 @@ const labels={thinking:'◌ Réflexion',working:'⌨ Code en cours',done:'✓ Te
 let current={state:'idle',settings:{},conversations:[],projects:[]},demo=null,demoTimer,feedbackTimer;
 const rows=new Map(),busy=new Set();
 function render(s){
- current=s;sprite.use(s.companion);sprite.set(demo||s.state,s.settings.reducedMotion);
+ current=s;document.title=(s.companion?.name||'Compagnon')+' · '+(names[s.provider]||'Agentibou');sprite.use(s.companion);sprite.set(demo||s.state,s.settings.reducedMotion);
  character.title='Glisser pour déplacer '+(s.companion?.name||'le compagnon');const idleStatus=document.querySelector('#idle-status');idleStatus.hidden=!!demo||!!s.conversations?.length||!names[s.provider];idleStatus.textContent=(names[s.provider]||'')+' · Au repos';
  const preference=s.petControls?.find(p=>p.provider===s.provider);document.documentElement.style.setProperty('--pet-scale',s.petLayout?.scale||1);document.querySelector('#shrink-pet').disabled=(preference?.scale||1)<=.6;document.querySelector('#grow-pet').disabled=(preference?.scale||1)>=1.5;
  document.documentElement.style.setProperty('--top-height',(s.petLayout?.topHeight||0)+'px');document.documentElement.style.setProperty('--bottom-height',(s.petLayout?.bottomHeight||0)+'px');

@@ -186,6 +186,10 @@ ipcMain.handle('open-session',async(request,key,at)=>{
 ipcMain.handle('select-companions',(_,value)=>{
  try{if(!value||!['shared','per-tool'].includes(value.mode))throw new Error('Choix invalide.');const catalog=library.list(),ids=new Set(catalog.map(p=>p.id));if(!ids.has(value.defaultId))throw new Error('Compagnon indisponible.');for(const provider of PROVIDERS){const id=value.assignments?.[provider];if(id!==undefined&&id!==''&&!ids.has(id))throw new Error('Compagnon indisponible.');}settings.companions=cleanSelection(value,catalog);saveSettings();send();return {saved:true};}catch(e){return {error:e.message};}
 });
+ipcMain.handle('rename-companion',(event,id,name)=>{
+ if(event.sender!==panel?.webContents)return {error:'Renommage disponible depuis le tableau de bord.'};
+ try{const companion=library.rename(id,name);send();return {companion};}catch(e){return {error:e.message};}
+});
 ipcMain.handle('import-companion',async(_,name)=>{
  let validator;
  try{
